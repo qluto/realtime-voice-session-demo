@@ -23,7 +23,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="main-content">
       <div class="conversation-center">
         <div class="conversation-log" id="conversation-log" style="display: none;">
-          <h3>💬 Conversation</h3>
+          <!-- <h3>💬 Conversation</h3> -->
           <div class="log-container" id="log-container">
             <!-- Messages will appear here -->
           </div>

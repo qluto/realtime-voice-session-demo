@@ -135,8 +135,8 @@ function showRecordingIndicator() {
   recordingIndicator = document.createElement('div');
   recordingIndicator.className = 'recording-indicator';
   recordingIndicator.innerHTML = `
-    <span class="mic-icon">🎤</span>
-    録音中
+    <span class="coach-icon">🧘‍♀️</span>
+    コーチが聞いています
     <span class="dots">
       <span>.</span>
       <span>.</span>

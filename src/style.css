@@ -376,7 +376,7 @@ body {
   animation: recordingPulse 1.5s ease-in-out infinite;
 }
 
-.recording-indicator .mic-icon {
+.recording-indicator .coach-icon {
   margin-right: 0.75rem;
   font-size: 1.1rem;
 }
