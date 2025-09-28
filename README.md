@@ -6,7 +6,7 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
 
 - 🧠 **ICF-Certified Coaching Approach**: Implements International Coach Federation Core Competencies
 - 🎤 **Real-time Voice Coaching**: Natural voice conversation using OpenAI's GPT Realtime API
-- 📋 **Structured Weekly Reflection**: 20-minute guided sessions with clear phases
+- 📋 **Structured Weekly Reflection**: 10-minute guided sessions with clear phases
 - 🔍 **Powerful Coaching Questions**: Research-based questions for deep reflection
 - 🌐 **Browser-based Experience**: No downloads required, works in modern browsers
 - 🔒 **Secure & Private**: Ephemeral token authentication, no data storage
@@ -50,31 +50,31 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
 1. **Prepare Your Space**: Find a quiet, private space where you can speak freely
 2. **Start Session**: Click "Start Coaching Session"
 3. **Allow Microphone**: Grant microphone access when prompted
-4. **Begin Reflection**: Your coach will guide you through a structured 20-minute session
+4. **Begin Reflection**: Your coach will guide you through a structured 10-minute session
 
-### Session Structure (20 minutes)
+### Session Structure (10 minutes)
 
-**🎯 Opening & Agenda Setting (2-3 min)**
+**🎯 Opening & Agenda Setting (1-2 min)**
 - Welcome and creating safety
 - Establishing the week's focus
 - Setting intention for reflection
 
-**🔍 Deep Reflection (8-10 min)**
+**🔍 Deep Reflection (4-5 min)**
 - Exploring experiences, patterns, emotions
 - Powerful questions about energy, challenges, growth
 - Space for processing and discovery
 
-**💡 Insight Synthesis (3-5 min)**
+**💡 Insight Synthesis (2-3 min)**
 - Identifying key learnings and themes
 - Articulating discoveries about yourself
 - Connecting patterns to values and growth
 
-**⚡ Forward Integration (5-7 min)**
+**⚡ Forward Integration (2-3 min)**
 - Applying insights to future actions
 - Setting intentions for the coming week
 - Creating specific, meaningful commitments
 
-**🙏 Closing (1-2 min)**
+**🙏 Closing (1 min)**
 - Acknowledging your reflection work
 - Appreciating your commitment to growth
 

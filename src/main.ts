@@ -31,7 +31,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="instructions" id="instructions">
           <p><strong>🎯 Your Weekly Reflection Session</strong></p>
           <p>Click "Start Coaching Session" and allow microphone access to begin your guided weekly reflection with an ICF-certified coaching approach.</p>
-          <p><strong>📋 Session Structure (20 minutes):</strong></p>
+          <p><strong>📋 Session Structure (about 10 minutes):</strong></p>
           <ul style="text-align: left; margin: 0.5rem 0; padding-left: 1.5rem;">
             <li><strong>Opening:</strong> Setting intention and focus</li>
             <li><strong>Deep Reflection:</strong> Exploring your week's experiences</li>

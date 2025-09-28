@@ -372,6 +372,19 @@ body {
   }
 }
 
+.conversation-end-marker {
+  text-align: center;
+  color: #A0A0A0;
+  font-size: 0.9rem;
+  font-style: italic;
+  margin: 2rem 0;
+  padding: 1rem;
+  opacity: 0.6;
+  animation: fadeInSlowly 0.8s ease-out;
+  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  font-weight: 300;
+}
+
 .usage-stats {
   margin: 0;
   padding: 1rem;
@@ -589,6 +602,10 @@ body {
 
   .message.assistant {
     background-color: rgba(34, 197, 94, 0.1);
+  }
+
+  .conversation-end-marker {
+    color: #9CA3AF;
   }
 }
 

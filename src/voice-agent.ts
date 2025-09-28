@@ -52,6 +52,20 @@ function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?
   logContainer.scrollTop = logContainer.scrollHeight;
 }
 
+function addConversationEndMarker() {
+  const logContainer = document.getElementById('log-container');
+  if (!logContainer) return;
+
+  const endMarkerDiv = document.createElement('div');
+  endMarkerDiv.className = 'conversation-end-marker';
+  endMarkerDiv.textContent = '-- conversation ended --';
+
+  logContainer.appendChild(endMarkerDiv);
+
+  // Auto-scroll to bottom
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
 function clearConversationLog() {
   const logContainer = document.getElementById('log-container');
   if (logContainer) {
@@ -870,6 +884,9 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     stopUsageTracking();
     // Stop session timer
     stopSessionTimer();
+
+    // Add conversation end marker before disconnecting
+    addConversationEndMarker();
 
     if (session) {
       try {
