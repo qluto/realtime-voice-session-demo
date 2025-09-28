@@ -1,18 +1,18 @@
-# OpenAI Voice Agent Chat MVP
+# 🌟 Weekly Reflection Coaching with AI
 
-A minimal voice chat application using OpenAI's GPT Realtime API with WebRTC for browser-based voice conversations.
+A professional coaching experience using OpenAI's GPT Realtime API with ICF Core Competencies for guided weekly reflection sessions.
 
 ## Features
 
-- 🎤 Real-time voice conversation with OpenAI's GPT model
-- 🌐 Browser-based WebRTC connection
-- 🎨 Modern, responsive UI
-- 🔒 Secure ephemeral token authentication
-- 📊 Real-time usage tracking and statistics
-- 🚀 Cached input token monitoring
-- 💾 Console logging of detailed API usage
-- 💰 Real-time cost calculation with OpenAI pricing
-- 🎯 Cache savings analysis and cost optimization insights
+- 🧠 **ICF-Certified Coaching Approach**: Implements International Coach Federation Core Competencies
+- 🎤 **Real-time Voice Coaching**: Natural voice conversation using OpenAI's GPT Realtime API
+- 📋 **Structured Weekly Reflection**: 20-minute guided sessions with clear phases
+- 🔍 **Powerful Coaching Questions**: Research-based questions for deep reflection
+- 🌐 **Browser-based Experience**: No downloads required, works in modern browsers
+- 🔒 **Secure & Private**: Ephemeral token authentication, no data storage
+- 📊 **Usage Analytics**: Real-time token consumption and cost tracking
+- 💰 **Cost Optimization**: Cached input monitoring and savings analysis
+- 🎯 **Professional Structure**: Opening → Reflection → Insights → Integration → Closing
 
 ## Prerequisites
 
@@ -45,14 +45,40 @@ A minimal voice chat application using OpenAI's GPT Realtime API with WebRTC for
 
 4. **Open your browser** and navigate to http://localhost:5173
 
-## Usage
+## How to Use Your Coaching Session
 
-1. Click "Connect to Voice Agent"
-2. The system will automatically generate a new ephemeral token
-3. Allow microphone access when requested
-4. Start talking! The AI will respond with voice
+1. **Prepare Your Space**: Find a quiet, private space where you can speak freely
+2. **Start Session**: Click "Start Coaching Session"
+3. **Allow Microphone**: Grant microphone access when prompted
+4. **Begin Reflection**: Your coach will guide you through a structured 20-minute session
 
-**Note:** Ephemeral tokens are now automatically generated for each new connection, eliminating the need for manual token management.
+### Session Structure (20 minutes)
+
+**🎯 Opening & Agenda Setting (2-3 min)**
+- Welcome and creating safety
+- Establishing the week's focus
+- Setting intention for reflection
+
+**🔍 Deep Reflection (8-10 min)**
+- Exploring experiences, patterns, emotions
+- Powerful questions about energy, challenges, growth
+- Space for processing and discovery
+
+**💡 Insight Synthesis (3-5 min)**
+- Identifying key learnings and themes
+- Articulating discoveries about yourself
+- Connecting patterns to values and growth
+
+**⚡ Forward Integration (5-7 min)**
+- Applying insights to future actions
+- Setting intentions for the coming week
+- Creating specific, meaningful commitments
+
+**🙏 Closing (1-2 min)**
+- Acknowledging your reflection work
+- Appreciating your commitment to growth
+
+**Note:** Your coach follows ICF Core Competencies, focusing on YOUR wisdom and insights rather than giving advice.
 
 ## Usage Tracking Features
 
