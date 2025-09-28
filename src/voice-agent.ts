@@ -8,6 +8,85 @@ let sessionStartTime: Date | null = null;
 let sessionTimerInterval: number | null = null;
 let sessionDuration = 0; // in seconds
 
+// Conversation logging
+function formatTimestamp(date: Date): string {
+  return date.toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?: Date) {
+  const logContainer = document.getElementById('log-container');
+  if (!logContainer) return;
+
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `message ${role}`;
+
+  const messageHeader = document.createElement('div');
+  messageHeader.className = 'message-header';
+
+  const messageRole = document.createElement('span');
+  messageRole.className = 'message-role';
+  messageRole.textContent = role === 'user' ? '👤 You' : '🤖 Coach';
+
+  const messageTimestamp = document.createElement('span');
+  messageTimestamp.className = 'message-timestamp';
+  messageTimestamp.textContent = formatTimestamp(timestamp || new Date());
+
+  messageHeader.appendChild(messageRole);
+  messageHeader.appendChild(messageTimestamp);
+
+  const messageContent = document.createElement('div');
+  messageContent.className = 'message-content';
+  messageContent.textContent = content;
+
+  messageDiv.appendChild(messageHeader);
+  messageDiv.appendChild(messageContent);
+
+  logContainer.appendChild(messageDiv);
+
+  // Auto-scroll to bottom
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function clearConversationLog() {
+  const logContainer = document.getElementById('log-container');
+  if (logContainer) {
+    logContainer.innerHTML = '';
+  }
+}
+
+function showConversationLog() {
+  const conversationLog = document.getElementById('conversation-log');
+  const instructions = document.getElementById('instructions');
+
+  if (conversationLog) {
+    conversationLog.style.display = 'block';
+  }
+  if (instructions) {
+    instructions.style.display = 'none';
+  }
+}
+
+function hideConversationLog() {
+  const conversationLog = document.getElementById('conversation-log');
+  const instructions = document.getElementById('instructions');
+
+  // Only hide conversation log if there are no messages
+  const logContainer = document.getElementById('log-container');
+  const hasMessages = logContainer && logContainer.children.length > 0;
+
+  if (conversationLog && !hasMessages) {
+    conversationLog.style.display = 'none';
+  }
+  if (instructions && !hasUsageData && !hasMessages) {
+    instructions.style.display = 'block';
+  }
+}
+
 // OpenAI Audio Pricing (per 1M tokens) - Updated as of latest pricing
 const OPENAI_PRICING = {
   'gpt-realtime': {
@@ -426,6 +505,13 @@ export function setupVoiceAgent() {
       usageStatsEl.style.display = (connected || hasUsageData) ? 'block' : 'none';
     }
 
+    // Show/hide conversation log based on connection status
+    if (connected) {
+      showConversationLog();
+    } else {
+      hideConversationLog();
+    }
+
     // Update usage stats title when disconnected but showing final stats
     const usageTitle = usageStatsEl?.querySelector('h3');
     if (usageTitle) {
@@ -473,6 +559,9 @@ export function setupVoiceAgent() {
 
     // Reset usage stats for new session
     resetUsageStats();
+
+    // Clear conversation log for new session
+    clearConversationLog();
 
     // Show connecting status
     updateConnectionStatus(false, true);
@@ -647,7 +736,16 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
 
       // Set up event listeners before connecting
       session.on('transport_event', (event) => {
-        console.log('Transport event:', event);
+        console.log('🎯 Transport event:', event.type, event);
+
+        // Log all message-related events to debug
+        if (event.type.includes('conversation') ||
+            event.type.includes('response') ||
+            event.type.includes('message') ||
+            event.type.includes('audio_transcript') ||
+            event.type.includes('text')) {
+          console.log('💬 Message-related event:', event.type, event);
+        }
         if (event.type === 'session.created') {
           console.log('Connected to OpenAI Realtime API');
           updateConnectionStatus(true);
@@ -658,6 +756,81 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           stopUsageTracking();
           stopSessionTimer();
           updateConnectionStatus(false);
+        } else if (event.type === 'input_audio_buffer.speech_started') {
+          // User started speaking
+          console.log('User started speaking');
+        } else if (event.type === 'input_audio_buffer.speech_stopped') {
+          // User stopped speaking
+          console.log('User stopped speaking');
+        } else if (event.type === 'conversation.item.input_audio_transcription.completed') {
+          // User's speech has been transcribed
+          const transcript = event.transcript;
+          if (transcript && transcript.trim()) {
+            addMessageToLog('user', transcript.trim());
+          }
+        } else if (event.type === 'response.text.delta') {
+          // Handle streaming text responses from assistant (for text mode)
+          console.log('Assistant text delta:', event.delta);
+        } else if (event.type === 'response.text.done') {
+          // Complete text response from assistant (for text mode)
+          const text = event.text;
+          if (text && text.trim()) {
+            addMessageToLog('assistant', text.trim());
+          }
+        } else if (event.type === 'conversation.item.created') {
+          // Handle conversation items (messages)
+          const item = event.item;
+          if (item && item.content) {
+            const content = Array.isArray(item.content) ?
+              item.content.map((c: any) => c.text || c.transcript || '').join(' ') :
+              item.content.text || item.content.transcript || '';
+
+            if (content.trim()) {
+              addMessageToLog(item.role === 'user' ? 'user' : 'assistant', content.trim());
+            }
+          }
+        } else if (event.type === 'response.audio_transcript.delta') {
+          // Handle streaming audio transcripts from assistant
+          const transcript = event.delta;
+          if (transcript) {
+            // For now, we'll aggregate these deltas and add them when complete
+            // This could be improved to show real-time streaming
+            console.log('Assistant audio delta:', transcript);
+          }
+        } else if (event.type === 'response.audio_transcript.done') {
+          // Complete audio transcript from assistant
+          const transcript = event.transcript;
+          if (transcript && transcript.trim()) {
+            console.log('📝 Adding assistant audio transcript:', transcript);
+            addMessageToLog('assistant', transcript.trim());
+          }
+        } else if (event.type === 'response.output_audio_transcript.done') {
+          // Complete output audio transcript from assistant (actual event type)
+          const transcript = event.transcript;
+          if (transcript && transcript.trim()) {
+            console.log('📝 Adding assistant output audio transcript:', transcript);
+            addMessageToLog('assistant', transcript.trim());
+          }
+        } else if (event.type === 'response.done') {
+          // Response completed - check for output items
+          if (event.response && event.response.output) {
+            event.response.output.forEach((item: any) => {
+              if (item.type === 'message' && item.role === 'assistant') {
+                const content = item.content;
+                if (Array.isArray(content)) {
+                  content.forEach((c: any) => {
+                    if (c.type === 'text' && c.text) {
+                      console.log('📝 Adding assistant text from response.done:', c.text);
+                      addMessageToLog('assistant', c.text);
+                    }
+                  });
+                } else if (content && content.text) {
+                  console.log('📝 Adding assistant content from response.done:', content.text);
+                  addMessageToLog('assistant', content.text);
+                }
+              }
+            });
+          }
         }
       });
 
