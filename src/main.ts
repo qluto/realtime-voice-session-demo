@@ -3,15 +3,15 @@ import { setupVoiceAgent } from './voice-agent.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
-    <h1>OpenAI Voice Agent Chat</h1>
+    <h1>🌟 Weekly Reflection Coaching</h1>
     <div class="chat-container">
       <div class="status-indicator">
         <span id="status">Disconnected</span>
       </div>
       <div class="controls">
-        <button id="connect-btn" type="button">Connect to Voice Agent</button>
-        <button id="disconnect-btn" type="button" disabled>Disconnect</button>
-        <button id="new-session-btn" type="button" style="display: none;">Start New Session</button>
+        <button id="connect-btn" type="button">Start Coaching Session</button>
+        <button id="disconnect-btn" type="button" disabled>End Session</button>
+        <button id="new-session-btn" type="button" style="display: none;">Start New Reflection</button>
       </div>
       <div class="usage-stats" id="usage-stats" style="display: none;">
         <h3>📊 Usage Statistics</h3>
@@ -72,10 +72,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
       </div>
       <div class="instructions">
-        <p>Click "Connect to Voice Agent" and allow microphone access to start talking with the AI assistant.</p>
-        <p><strong>Automatic Setup:</strong> Ephemeral tokens are automatically generated using your .env OPENAI_API_KEY.</p>
-        <p><strong>Usage tracking:</strong> Token consumption and cached input statistics are logged to the browser console and displayed above while connected.</p>
-        <p><strong>Requirements:</strong> Make sure the token generation server is running on port 3001.</p>
+        <p><strong>🎯 Your Weekly Reflection Session</strong></p>
+        <p>Click "Start Coaching Session" and allow microphone access to begin your guided weekly reflection with an ICF-certified coaching approach.</p>
+        <p><strong>📋 Session Structure (20 minutes):</strong></p>
+        <ul style="text-align: left; margin: 0.5rem 0; padding-left: 1.5rem;">
+          <li><strong>Opening:</strong> Setting intention and focus</li>
+          <li><strong>Deep Reflection:</strong> Exploring your week's experiences</li>
+          <li><strong>Insight Synthesis:</strong> Identifying key learnings</li>
+          <li><strong>Forward Integration:</strong> Planning intentional action</li>
+        </ul>
+        <p><strong>💡 Coaching Approach:</strong> Powerful questions, active listening, and trusting your wisdom to discover insights.</p>
+        <p><strong>Technical:</strong> Ephemeral tokens auto-generated. Ensure server runs on port 3001.</p>
       </div>
     </div>
   </div>
