@@ -800,6 +800,47 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* Summary Controls */
+.summary-controls {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-top: 1px solid rgba(139, 115, 85, 0.2);
+  display: flex;
+  justify-content: center;
+}
+
+.summary-btn {
+  background: linear-gradient(135deg, #C9A86A 0%, #8B7355 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 25px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(201, 168, 106, 0.3);
+  animation: fadeIn 0.5s ease;
+}
+
+.summary-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201, 168, 106, 0.4);
+  background: linear-gradient(135deg, #D4B575 0%, #966E60 100%);
+}
+
+.summary-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(201, 168, 106, 0.3);
+}
+
+.summary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;

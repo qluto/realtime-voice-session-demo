@@ -95,6 +95,12 @@ function clearConversationLog() {
   stopSpeakingAnimation();
   hideRecordingIndicator();
   lastAssistantMessageId = null;
+
+  // Hide summary controls when clearing conversation
+  const summaryControls = document.getElementById('summary-controls');
+  if (summaryControls) {
+    summaryControls.style.display = 'none';
+  }
 }
 
 function showConversationLog() {
@@ -396,6 +402,23 @@ function updateUIUsageStats() {
 
   // Mark that we have usage data
   hasUsageData = true;
+
+  // Show/hide summary button based on requests count (4+ exchanges)
+  updateSummaryButtonVisibility();
+}
+
+function updateSummaryButtonVisibility() {
+  if (!session) return;
+
+  const summaryControls = document.getElementById('summary-controls');
+  if (!summaryControls) return;
+
+  // Show summary button after 4+ requests (indicating sufficient exchange)
+  if (session.usage.requests >= 4 && isConnected) {
+    summaryControls.style.display = 'block';
+  } else {
+    summaryControls.style.display = 'none';
+  }
 }
 
 function logUsageInfo() {
@@ -542,8 +565,9 @@ export function setupVoiceAgent() {
   const connectBtn = document.querySelector<HTMLButtonElement>('#connect-btn')!;
   const disconnectBtn = document.querySelector<HTMLButtonElement>('#disconnect-btn')!;
   const newSessionBtn = document.querySelector<HTMLButtonElement>('#new-session-btn')!;
+  const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn')!;
   const statusElement = document.querySelector<HTMLSpanElement>('#status')!;
-  const statusIndicator = document.querySelector('.status-indicator')!;
+  const statusIndicator = document.querySelector('.status-indicator')!
 
   updateConnectionStatus(false);
 
@@ -566,6 +590,36 @@ export function setupVoiceAgent() {
     } catch (error) {
       console.error('Failed to start new session:', error);
       alert('Failed to start new session. Please try again.');
+    }
+  });
+
+  requestSummaryBtn.addEventListener('click', async () => {
+    if (!session || !isConnected) return;
+
+    try {
+      // Add user message to conversation log
+      addMessageToLog('user', 'セッションのまとめを要求しました。');
+
+      // Send text message to request session summary
+      session.sendMessage({
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。'
+        }]
+      });
+
+      // Hide the summary button after use
+      const summaryControls = document.getElementById('summary-controls');
+      if (summaryControls) {
+        summaryControls.style.display = 'none';
+      }
+
+      console.log('📝 Summary request sent to coach');
+    } catch (error) {
+      console.error('Failed to send summary request:', error);
+      alert('Failed to request summary. Please try again.');
     }
   });
 
@@ -852,6 +906,13 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           stopSessionTimer();
           stopSpeakingAnimation();
           hideRecordingIndicator();
+
+          // Hide summary controls on error/close
+          const summaryControls = document.getElementById('summary-controls');
+          if (summaryControls) {
+            summaryControls.style.display = 'none';
+          }
+
           updateConnectionStatus(false);
         } else if (event.type === 'input_audio_buffer.speech_started') {
           // User started speaking - stop any coach animation
@@ -958,6 +1019,13 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         stopSessionTimer();
         stopSpeakingAnimation();
         hideRecordingIndicator();
+
+        // Hide summary controls on error
+        const summaryControls = document.getElementById('summary-controls');
+        if (summaryControls) {
+          summaryControls.style.display = 'none';
+        }
+
         updateConnectionStatus(false);
       });
 
@@ -993,6 +1061,12 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     // Clean up speaking animations and recording indicator
     stopSpeakingAnimation();
     hideRecordingIndicator();
+
+    // Hide summary controls on disconnect
+    const summaryControls = document.getElementById('summary-controls');
+    if (summaryControls) {
+      summaryControls.style.display = 'none';
+    }
 
     // Add conversation end marker before disconnecting
     addConversationEndMarker();

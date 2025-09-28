@@ -27,6 +27,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <div class="log-container" id="log-container">
             <!-- Messages will appear here -->
           </div>
+          <div class="summary-controls" id="summary-controls" style="display: none;">
+            <button id="request-summary-btn" type="button" class="summary-btn">
+              📝 セッションのまとめを要求
+            </button>
+          </div>
         </div>
         <div class="instructions" id="instructions">
           <p><strong>🎯 Your Weekly Reflection Session</strong></p>
