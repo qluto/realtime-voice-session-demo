@@ -7,6 +7,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="chat-container">
       <div class="status-indicator">
         <span id="status">Disconnected</span>
+        <div id="session-timer" style="display: none; margin-top: 0.5rem; font-size: 1.1rem; font-weight: 600; color: #22c55e;">
+          Session: <span id="timer-display">00:00</span>
+        </div>
       </div>
       <div class="controls">
         <button id="connect-btn" type="button">Start Coaching Session</button>
@@ -16,6 +19,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="usage-stats" id="usage-stats" style="display: none;">
         <h3>📊 Usage Statistics</h3>
         <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Session Duration:</span>
+            <span class="stat-value" id="stat-session-duration">00:00</span>
+          </div>
           <div class="stat-item">
             <span class="stat-label">Requests:</span>
             <span class="stat-value" id="stat-requests">0</span>

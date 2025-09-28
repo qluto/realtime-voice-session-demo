@@ -4,6 +4,9 @@ let session: RealtimeSession | null = null;
 let isConnected = false;
 let usageInterval: number | null = null;
 let hasUsageData = false;
+let sessionStartTime: Date | null = null;
+let sessionTimerInterval: number | null = null;
+let sessionDuration = 0; // in seconds
 
 // OpenAI Audio Pricing (per 1M tokens) - Updated as of latest pricing
 const OPENAI_PRICING = {
@@ -38,6 +41,81 @@ const OPENAI_PRICING = {
     output: 20.00
   }
 } as const;
+
+function formatTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+function startSessionTimer() {
+  sessionStartTime = new Date();
+  sessionDuration = 0;
+
+  // Update timer display every second
+  sessionTimerInterval = setInterval(() => {
+    if (sessionStartTime) {
+      sessionDuration = Math.floor((new Date().getTime() - sessionStartTime.getTime()) / 1000);
+      const timerDisplay = document.getElementById('timer-display');
+      if (timerDisplay) {
+        timerDisplay.textContent = formatTime(sessionDuration);
+      }
+    }
+  }, 1000) as unknown as number;
+
+  // Show timer display
+  const timerElement = document.getElementById('session-timer');
+  if (timerElement) {
+    timerElement.style.display = 'block';
+  }
+}
+
+function stopSessionTimer() {
+  if (sessionTimerInterval) {
+    clearInterval(sessionTimerInterval);
+    sessionTimerInterval = null;
+  }
+
+  // Calculate final duration
+  if (sessionStartTime) {
+    sessionDuration = Math.floor((new Date().getTime() - sessionStartTime.getTime()) / 1000);
+  }
+
+  // Hide timer display
+  const timerElement = document.getElementById('session-timer');
+  if (timerElement) {
+    timerElement.style.display = 'none';
+  }
+
+  // Update final duration in stats
+  const durationElement = document.getElementById('stat-session-duration');
+  if (durationElement) {
+    durationElement.textContent = formatTime(sessionDuration);
+  }
+}
+
+function resetSessionTimer() {
+  sessionStartTime = null;
+  sessionDuration = 0;
+
+  // Reset timer display
+  const timerDisplay = document.getElementById('timer-display');
+  if (timerDisplay) {
+    timerDisplay.textContent = '00:00';
+  }
+
+  // Reset duration in stats
+  const durationElement = document.getElementById('stat-session-duration');
+  if (durationElement) {
+    durationElement.textContent = '00:00';
+  }
+
+  // Hide timer
+  const timerElement = document.getElementById('session-timer');
+  if (timerElement) {
+    timerElement.style.display = 'none';
+  }
+}
 
 function calculateCost(usage: any, modelName: string = 'gpt-realtime') {
   const pricing = OPENAI_PRICING[modelName as keyof typeof OPENAI_PRICING] || OPENAI_PRICING['gpt-realtime'];
@@ -151,6 +229,7 @@ function logUsageInfo() {
   const usage = session.usage;
 
   console.group('🔍 OpenAI API Usage Statistics');
+  console.log(`⏱️  Session Duration: ${formatTime(sessionDuration)}`);
   console.log(`📊 Requests: ${usage.requests}`);
   console.log(`📥 Input Tokens: ${usage.inputTokens}`);
   console.log(`📤 Output Tokens: ${usage.outputTokens}`);
@@ -219,6 +298,9 @@ function logUsageInfo() {
 }
 
 function resetUsageStats() {
+  // Reset session timer
+  resetSessionTimer();
+
   // Reset all usage statistics in UI
   const requestsEl = document.getElementById('stat-requests');
   const inputTokensEl = document.getElementById('stat-input-tokens');
@@ -570,9 +652,11 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           console.log('Connected to OpenAI Realtime API');
           updateConnectionStatus(true);
           startUsageTracking();
+          startSessionTimer();
         } else if (event.type === 'error' || event.type === 'close') {
           console.log('Disconnected from OpenAI Realtime API');
           stopUsageTracking();
+          stopSessionTimer();
           updateConnectionStatus(false);
         }
       });
@@ -581,6 +665,7 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         console.error('Session error:', error);
         alert(`Error: ${error.error || 'Unknown error occurred'}`);
         stopUsageTracking();
+        stopSessionTimer();
         updateConnectionStatus(false);
       });
 
@@ -594,6 +679,7 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         if (session && !isConnected) {
           console.log('Voice agent connected! You can now speak to the assistant.');
           updateConnectionStatus(true);
+          startSessionTimer();
         }
       }, 1000);
 
@@ -609,6 +695,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
 
     // Stop usage tracking and log final stats
     stopUsageTracking();
+    // Stop session timer
+    stopSessionTimer();
 
     if (session) {
       try {
