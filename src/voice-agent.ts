@@ -8,6 +8,11 @@ let sessionStartTime: Date | null = null;
 let sessionTimerInterval: number | null = null;
 let sessionDuration = 0; // in seconds
 
+// Speaking state management
+let currentSpeakingMessage: HTMLElement | null = null;
+let recordingIndicator: HTMLElement | null = null;
+let lastAssistantMessageId: string | null = null;
+
 // Conversation logging
 function formatTimestamp(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -18,12 +23,25 @@ function formatTimestamp(date: Date): string {
   });
 }
 
-function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?: Date) {
+function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?: Date, messageId?: string): HTMLElement {
   const logContainer = document.getElementById('log-container');
-  if (!logContainer) return;
+  if (!logContainer) return document.createElement('div');
+
+  // Prevent duplicate assistant messages
+  if (role === 'assistant' && messageId) {
+    if (lastAssistantMessageId === messageId) {
+      console.log('🔄 Skipping duplicate assistant message:', messageId);
+      const lastMessage = getLastAssistantMessage();
+      return lastMessage || document.createElement('div');
+    }
+    lastAssistantMessageId = messageId;
+  }
 
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
+  if (messageId) {
+    messageDiv.setAttribute('data-message-id', messageId);
+  }
 
   const messageHeader = document.createElement('div');
   messageHeader.className = 'message-header';
@@ -50,6 +68,8 @@ function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?
 
   // Auto-scroll to bottom
   logContainer.scrollTop = logContainer.scrollHeight;
+
+  return messageDiv;
 }
 
 function addConversationEndMarker() {
@@ -71,6 +91,10 @@ function clearConversationLog() {
   if (logContainer) {
     logContainer.innerHTML = '';
   }
+  // Reset speaking animation state
+  stopSpeakingAnimation();
+  hideRecordingIndicator();
+  lastAssistantMessageId = null;
 }
 
 function showConversationLog() {
@@ -99,6 +123,64 @@ function hideConversationLog() {
   if (instructions && !hasUsageData && !hasMessages) {
     instructions.style.display = 'block';
   }
+}
+
+// Speaking animation functions
+function showRecordingIndicator() {
+  if (recordingIndicator) return; // Already showing
+
+  const logContainer = document.getElementById('log-container');
+  if (!logContainer) return;
+
+  recordingIndicator = document.createElement('div');
+  recordingIndicator.className = 'recording-indicator';
+  recordingIndicator.innerHTML = `
+    <span class="mic-icon">🎤</span>
+    録音中
+    <span class="dots">
+      <span>.</span>
+      <span>.</span>
+      <span>.</span>
+    </span>
+  `;
+
+  logContainer.appendChild(recordingIndicator);
+  logContainer.scrollTop = logContainer.scrollHeight;
+
+  // Show conversation log if it's hidden
+  showConversationLog();
+}
+
+function hideRecordingIndicator() {
+  if (recordingIndicator && recordingIndicator.parentNode) {
+    recordingIndicator.parentNode.removeChild(recordingIndicator);
+    recordingIndicator = null;
+  }
+}
+
+function startSpeakingAnimation(messageElement: HTMLElement) {
+  // Stop any previous speaking animation
+  stopSpeakingAnimation();
+
+  currentSpeakingMessage = messageElement;
+  currentSpeakingMessage.classList.add('speaking');
+  console.log('🎵 Started speaking animation');
+}
+
+function stopSpeakingAnimation() {
+  if (currentSpeakingMessage) {
+    currentSpeakingMessage.classList.remove('speaking');
+    currentSpeakingMessage = null;
+    console.log('🎵 Stopped speaking animation');
+  }
+}
+
+function getLastAssistantMessage(): HTMLElement | null {
+  const logContainer = document.getElementById('log-container');
+  if (!logContainer) return null;
+
+  const messages = logContainer.querySelectorAll('.message.assistant');
+  return messages.length > 0 ? messages[messages.length - 1] as HTMLElement : null;
 }
 
 // OpenAI Audio Pricing (per 1M tokens) - Updated as of latest pricing
@@ -752,13 +834,12 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
       session.on('transport_event', (event) => {
         console.log('🎯 Transport event:', event.type, event);
 
-        // Log all message-related events to debug
-        if (event.type.includes('conversation') ||
-            event.type.includes('response') ||
-            event.type.includes('message') ||
-            event.type.includes('audio_transcript') ||
-            event.type.includes('text')) {
-          console.log('💬 Message-related event:', event.type, event);
+        // Log ALL events for complete debugging
+        console.log(`⏰ ${new Date().toLocaleTimeString()} - EVENT: ${event.type}:`, event);
+
+        // Specifically look for audio-related events
+        if (event.type.includes('audio')) {
+          console.log(`🔊 AUDIO EVENT: ${event.type}`, event);
         }
         if (event.type === 'session.created') {
           console.log('Connected to OpenAI Realtime API');
@@ -769,13 +850,18 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           console.log('Disconnected from OpenAI Realtime API');
           stopUsageTracking();
           stopSessionTimer();
+          stopSpeakingAnimation();
+          hideRecordingIndicator();
           updateConnectionStatus(false);
         } else if (event.type === 'input_audio_buffer.speech_started') {
-          // User started speaking
-          console.log('User started speaking');
+          // User started speaking - stop any coach animation
+          console.log('User started speaking - stopping coach animation');
+          stopSpeakingAnimation();
+          showRecordingIndicator();
         } else if (event.type === 'input_audio_buffer.speech_stopped') {
           // User stopped speaking
           console.log('User stopped speaking');
+          hideRecordingIndicator();
         } else if (event.type === 'conversation.item.input_audio_transcription.completed') {
           // User's speech has been transcribed
           const transcript = event.transcript;
@@ -807,26 +893,43 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           // Handle streaming audio transcripts from assistant
           const transcript = event.delta;
           if (transcript) {
-            // For now, we'll aggregate these deltas and add them when complete
-            // This could be improved to show real-time streaming
-            console.log('Assistant audio delta:', transcript);
+            console.log('🎵 Assistant audio delta:', transcript);
           }
         } else if (event.type === 'response.audio_transcript.done') {
           // Complete audio transcript from assistant
           const transcript = event.transcript;
           if (transcript && transcript.trim()) {
             console.log('📝 Adding assistant audio transcript:', transcript);
-            addMessageToLog('assistant', transcript.trim());
+            const messageId = `audio_transcript_${Date.now()}_${Math.random()}`;
+            const messageElement = addMessageToLog('assistant', transcript.trim(), undefined, messageId);
+            console.log('🎵 Starting animation after audio transcript done');
+            startSpeakingAnimation(messageElement);
           }
         } else if (event.type === 'response.output_audio_transcript.done') {
-          // Complete output audio transcript from assistant (actual event type)
+          // Complete output audio transcript from assistant
           const transcript = event.transcript;
           if (transcript && transcript.trim()) {
             console.log('📝 Adding assistant output audio transcript:', transcript);
-            addMessageToLog('assistant', transcript.trim());
+            const messageId = `output_audio_transcript_${Date.now()}_${Math.random()}`;
+            const messageElement = addMessageToLog('assistant', transcript.trim(), undefined, messageId);
+            console.log('🎵 Starting animation after output audio transcript done');
+            startSpeakingAnimation(messageElement);
           }
+        } else if (event.type === 'output_audio_buffer.stopped') {
+          // Audio playback completed - this is the actual event that fires
+          console.log('🔊 Audio playback stopped - stopping animation');
+          stopSpeakingAnimation();
+        } else if (event.type === 'response.audio.delta') {
+          // Audio chunks being played
+          console.log('🔊 Audio delta - audio is being played');
+        } else if (event.type === 'response.audio.done') {
+          // Audio playback completed (backup)
+          console.log('🔊 Audio done - stopping animation');
+          stopSpeakingAnimation();
         } else if (event.type === 'response.done') {
-          // Response completed - check for output items
+          // Response completed - DO NOT stop animation here, let audio events handle it
+          console.log('🎯 Response done - NOT stopping animation, waiting for audio events');
+
           if (event.response && event.response.output) {
             event.response.output.forEach((item: any) => {
               if (item.type === 'message' && item.role === 'assistant') {
@@ -853,6 +956,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         alert(`Error: ${error.error || 'Unknown error occurred'}`);
         stopUsageTracking();
         stopSessionTimer();
+        stopSpeakingAnimation();
+        hideRecordingIndicator();
         updateConnectionStatus(false);
       });
 
@@ -884,6 +989,10 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     stopUsageTracking();
     // Stop session timer
     stopSessionTimer();
+
+    // Clean up speaking animations and recording indicator
+    stopSpeakingAnimation();
+    hideRecordingIndicator();
 
     // Add conversation end marker before disconnecting
     addConversationEndMarker();
