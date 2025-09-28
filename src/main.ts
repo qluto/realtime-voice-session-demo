@@ -3,12 +3,12 @@ import { setupVoiceAgent } from './voice-agent.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
-    <h1>🌟 Weekly Reflection Coaching</h1>
-    <div class="main-layout">
-      <div class="conversation-panel">
+    <header class="top-header">
+      <h1 class="brand-title">🌟 Weekly Reflection Coaching</h1>
+      <div class="header-controls">
         <div class="status-indicator">
           <span id="status">Disconnected</span>
-          <div id="session-timer" style="display: none; margin-top: 0.5rem; font-size: 1.1rem; font-weight: 600; color: #22c55e;">
+          <div id="session-timer" style="display: none; margin-left: 1rem; font-size: 0.9rem; font-weight: 500; color: #3B5C4C;">
             Session: <span id="timer-display">00:00</span>
           </div>
         </div>
@@ -17,8 +17,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button id="disconnect-btn" type="button" disabled>End Session</button>
           <button id="new-session-btn" type="button" style="display: none;">Start New Reflection</button>
         </div>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <div class="conversation-center">
         <div class="conversation-log" id="conversation-log" style="display: none;">
-          <h3>💬 Conversation Log</h3>
+          <h3>💬 Conversation</h3>
           <div class="log-container" id="log-container">
             <!-- Messages will appear here -->
           </div>
@@ -37,12 +42,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <p><strong>Technical:</strong> Ephemeral tokens auto-generated. Ensure server runs on port 3001.</p>
         </div>
       </div>
-      <div class="stats-panel">
+
+      <aside class="stats-sidebar">
         <div class="usage-stats" id="usage-stats" style="display: none;">
-          <h3>📊 Usage Statistics</h3>
+          <h3>📊 Statistics</h3>
           <div class="stats-grid">
             <div class="stat-item">
-              <span class="stat-label">Session Duration:</span>
+              <span class="stat-label">Duration:</span>
               <span class="stat-value" id="stat-session-duration">00:00</span>
             </div>
             <div class="stat-item">
@@ -62,45 +68,45 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
               <span class="stat-value" id="stat-total-tokens">0</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Cached Tokens:</span>
+              <span class="stat-label">Cached:</span>
               <span class="stat-value" id="stat-cached-tokens">0</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Text Tokens:</span>
+              <span class="stat-label">Text:</span>
               <span class="stat-value" id="stat-text-tokens">0</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Audio Tokens:</span>
+              <span class="stat-label">Audio:</span>
               <span class="stat-value" id="stat-audio-tokens">0</span>
             </div>
           </div>
           <div class="cost-section">
-            <h4>💰 Cost Breakdown (gpt-realtime)</h4>
+            <h4>💰 Cost</h4>
             <div class="cost-grid">
               <div class="cost-item">
-                <span class="cost-label">Input Cost:</span>
+                <span class="cost-label">Input:</span>
                 <span class="cost-value" id="cost-input">$0.00</span>
               </div>
               <div class="cost-item">
-                <span class="cost-label">Cached Input Cost:</span>
+                <span class="cost-label">Cached:</span>
                 <span class="cost-value cached" id="cost-cached-input">$0.00</span>
               </div>
               <div class="cost-item">
-                <span class="cost-label">Output Cost:</span>
+                <span class="cost-label">Output:</span>
                 <span class="cost-value" id="cost-output">$0.00</span>
               </div>
               <div class="cost-item total-cost">
-                <span class="cost-label">Total Cost:</span>
+                <span class="cost-label">Total:</span>
                 <span class="cost-value" id="cost-total">$0.00</span>
               </div>
               <div class="cost-item savings">
-                <span class="cost-label">Cache Savings:</span>
+                <span class="cost-label">Savings:</span>
                 <span class="cost-value" id="cost-savings">$0.00</span>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   </div>
 `
