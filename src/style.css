@@ -1,0 +1,378 @@
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.vanilla:hover {
+  filter: drop-shadow(0 0 2em #3178c6aa);
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+.chat-container {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 2rem;
+  border: 1px solid #333;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.status-indicator {
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.status-indicator #status {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+
+.status-indicator #status:before {
+  content: "●";
+  margin-right: 0.5rem;
+}
+
+.status-indicator.connected #status {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.status-indicator.disconnected #status {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.status-indicator.connecting #status {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+  animation: pulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.controls button {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  transition: all 0.25s;
+}
+
+.controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.controls button:disabled:hover {
+  border-color: transparent;
+}
+
+#connect-btn {
+  background-color: #22c55e;
+  color: white;
+  border-color: #22c55e;
+}
+
+#connect-btn:hover:not(:disabled) {
+  background-color: #16a34a;
+  border-color: #16a34a;
+}
+
+#disconnect-btn {
+  background-color: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+#disconnect-btn:hover:not(:disabled) {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+#new-session-btn {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+#new-session-btn:hover:not(:disabled) {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.instructions {
+  text-align: left;
+  color: #888;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.instructions p {
+  margin: 0.5rem 0;
+}
+
+.usage-stats {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.usage-stats h3 {
+  margin: 0 0 1rem 0;
+  color: #22c55e;
+  font-size: 1.1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-label {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.stat-value {
+  color: #fff;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.stat-value.cached {
+  color: #22c55e;
+}
+
+.stat-item:has(#stat-text-tokens) {
+  border-left: 3px solid #3b82f6;
+}
+
+.stat-item:has(#stat-audio-tokens) {
+  border-left: 3px solid #f59e0b;
+}
+
+.cost-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cost-section h4 {
+  margin: 0 0 1rem 0;
+  color: #f59e0b;
+  font-size: 1rem;
+}
+
+.cost-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.8rem;
+}
+
+.cost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cost-label {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.cost-value {
+  color: #fff;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9rem;
+}
+
+.cost-value.cached {
+  color: #22c55e;
+}
+
+.cost-item.total-cost {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.cost-item.total-cost .cost-value {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.cost-item.savings {
+  background-color: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.cost-item.savings .cost-value {
+  color: #22c55e;
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: light) {
+  .cost-section {
+    border-top-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .cost-item {
+    background-color: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+
+  .cost-value {
+    color: #111;
+  }
+
+  .cost-item.total-cost {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+
+  .cost-item.savings {
+    background-color: rgba(34, 197, 94, 0.1);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .usage-stats {
+    border-color: #e5e7eb;
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+
+  .stat-item {
+    background-color: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-value {
+    color: #111;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .chat-container {
+    border-color: #e5e7eb;
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
