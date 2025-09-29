@@ -99,22 +99,41 @@ export function setupVoiceAgent() {
     if (connecting) {
       statusElement.textContent = 'Connecting...';
       statusIndicator.className = 'status-indicator connecting';
+      // Hide all buttons during connection
+      connectBtn.style.display = 'none';
       connectBtn.disabled = true;
+      disconnectBtn.style.display = 'none';
       disconnectBtn.disabled = true;
       newSessionBtn.style.display = 'none';
+      newSessionBtn.disabled = true;
+    } else if (connected) {
+      statusElement.textContent = 'Connected';
+      statusIndicator.className = 'status-indicator connected';
+      // Show only disconnect button when connected
+      connectBtn.style.display = 'none';
+      connectBtn.disabled = true;
+      disconnectBtn.style.display = 'inline-block';
+      disconnectBtn.disabled = false;
+      newSessionBtn.style.display = 'none';
+      newSessionBtn.disabled = true;
     } else {
-      statusElement.textContent = connected ? 'Connected' : 'Disconnected';
-      statusIndicator.className = `status-indicator ${connected ? 'connected' : 'disconnected'}`;
-      connectBtn.disabled = connected;
-      disconnectBtn.disabled = !connected;
-
-      // Show new session button when disconnected and we have usage data
-      if (!connected && hasUsageData) {
+      statusElement.textContent = 'Disconnected';
+      statusIndicator.className = 'status-indicator disconnected';
+      // Show appropriate button when disconnected
+      if (hasUsageData) {
         connectBtn.style.display = 'none';
+        connectBtn.disabled = true;
+        disconnectBtn.style.display = 'none';
+        disconnectBtn.disabled = true;
         newSessionBtn.style.display = 'inline-block';
+        newSessionBtn.disabled = false;
       } else {
         connectBtn.style.display = 'inline-block';
+        connectBtn.disabled = false;
+        disconnectBtn.style.display = 'none';
+        disconnectBtn.disabled = true;
         newSessionBtn.style.display = 'none';
+        newSessionBtn.disabled = true;
       }
     }
 
