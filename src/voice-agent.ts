@@ -22,9 +22,12 @@ import {
   startSpeakingAnimation,
   stopSpeakingAnimation
 } from './utils/speaking-animation';
+import { SessionAnalyzer } from './session-analyzer';
+import type { PhaseKey } from './session-analyzer';
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
+let sessionAnalyzer: SessionAnalyzer | null = null;
 
 
 
@@ -37,8 +40,66 @@ export function setupVoiceAgent() {
   const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn')!;
   const statusElement = document.querySelector<HTMLSpanElement>('#status')!;
   const statusIndicator = document.querySelector('.status-indicator')!
+  const progressPanel = document.querySelector<HTMLElement>('#progress-panel')
+  const currentPhaseEl = document.querySelector<HTMLElement>('#current-phase')
+  const progressNotesEl = document.querySelector<HTMLElement>('#progress-notes')
+  const closureSuggestionEl = document.querySelector<HTMLElement>('#closure-suggestion')
+  const closureMessageEl = document.querySelector<HTMLElement>('#closure-message')
+  const autoSummaryToggle = document.querySelector<HTMLInputElement>('#auto-summary-toggle')
+  const acceptSummaryBtn = document.querySelector<HTMLButtonElement>('#accept-summary-btn')
+  const continueSessionBtn = document.querySelector<HTMLButtonElement>('#continue-session-btn')
+
+  const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
+    opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
+    reflection: document.querySelector<HTMLElement>('[data-phase-fill="reflection"]'),
+    insight: document.querySelector<HTMLElement>('[data-phase-fill="insight"]'),
+    integration: document.querySelector<HTMLElement>('[data-phase-fill="integration"]'),
+    closing: document.querySelector<HTMLElement>('[data-phase-fill="closing"]')
+  }
+
+  const phaseScoreElements: Record<PhaseKey, HTMLElement | null> = {
+    opening: document.querySelector<HTMLElement>('[data-phase-score="opening"]'),
+    reflection: document.querySelector<HTMLElement>('[data-phase-score="reflection"]'),
+    insight: document.querySelector<HTMLElement>('[data-phase-score="insight"]'),
+    integration: document.querySelector<HTMLElement>('[data-phase-score="integration"]'),
+    closing: document.querySelector<HTMLElement>('[data-phase-score="closing"]')
+  }
 
   updateConnectionStatus(false);
+
+  async function requestSessionSummary(triggeredByAnalyzer = false) {
+    if (!session || !isConnected) return;
+
+    try {
+      sessionAnalyzer?.markSummaryInitiated();
+
+      addMessageToLog('user', 'セッションのまとめを要求しました。');
+
+      session.sendMessage({
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。'
+        }]
+      });
+
+      const summaryControls = document.getElementById('summary-controls');
+      if (summaryControls) {
+        summaryControls.style.display = 'none';
+      }
+      if (closureSuggestionEl) {
+        closureSuggestionEl.style.display = 'none';
+      }
+
+      console.log('📝 Summary request sent to coach');
+    } catch (error) {
+      console.error('Failed to send summary request:', error);
+      if (!triggeredByAnalyzer) {
+        alert('Failed to request summary. Please try again.');
+      }
+    }
+  }
 
   connectBtn.addEventListener('click', async () => {
     try {
@@ -63,34 +124,34 @@ export function setupVoiceAgent() {
   });
 
   requestSummaryBtn.addEventListener('click', async () => {
-    if (!session || !isConnected) return;
-
-    try {
-      // Add user message to conversation log
-      addMessageToLog('user', 'セッションのまとめを要求しました。');
-
-      // Send text message to request session summary
-      session.sendMessage({
-        type: 'message',
-        role: 'user',
-        content: [{
-          type: 'input_text',
-          text: '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。'
-        }]
-      });
-
-      // Hide the summary button after use
-      const summaryControls = document.getElementById('summary-controls');
-      if (summaryControls) {
-        summaryControls.style.display = 'none';
-      }
-
-      console.log('📝 Summary request sent to coach');
-    } catch (error) {
-      console.error('Failed to send summary request:', error);
-      alert('Failed to request summary. Please try again.');
-    }
+    await requestSessionSummary(false);
   });
+
+  if (autoSummaryToggle) {
+    autoSummaryToggle.addEventListener('change', () => {
+      sessionAnalyzer?.setAutoSummaryEnabled(autoSummaryToggle.checked);
+    });
+  }
+
+  if (acceptSummaryBtn) {
+    acceptSummaryBtn.addEventListener('click', async () => {
+      if (sessionAnalyzer) {
+        await sessionAnalyzer.acceptClosureSuggestion();
+      } else {
+        await requestSessionSummary(false);
+      }
+    });
+  }
+
+  if (continueSessionBtn) {
+    continueSessionBtn.addEventListener('click', () => {
+      if (sessionAnalyzer) {
+        sessionAnalyzer.declineClosureSuggestion();
+      } else if (closureSuggestionEl) {
+        closureSuggestionEl.style.display = 'none';
+      }
+    });
+  }
 
   function updateConnectionStatus(connected: boolean, connecting: boolean = false) {
     isConnected = connected;
@@ -177,7 +238,6 @@ export function setupVoiceAgent() {
           'Content-Type': 'application/json'
         }
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Token generation failed: ${errorData.error}`);
@@ -373,6 +433,26 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         model: 'gpt-realtime',
       });
 
+      sessionAnalyzer?.dispose();
+      sessionAnalyzer = new SessionAnalyzer({
+        session,
+        controls: {
+          panel: progressPanel || null,
+          phaseFills: phaseFillElements,
+          phaseScores: phaseScoreElements,
+          currentPhase: currentPhaseEl || null,
+          progressNotes: progressNotesEl || null,
+          closureContainer: closureSuggestionEl || null,
+          closureMessage: closureMessageEl || null
+        },
+        initialAutoSummary: autoSummaryToggle?.checked ?? true,
+        onRequestSummary: () => requestSessionSummary(true)
+      });
+
+      if (autoSummaryToggle) {
+        sessionAnalyzer.setAutoSummaryEnabled(autoSummaryToggle.checked);
+      }
+
       // Set up event listeners before connecting
       session.on('transport_event', (event) => {
         console.log('🎯 Transport event:', event.type, event);
@@ -395,6 +475,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           stopSessionTimer();
           stopSpeakingAnimation();
           hideRecordingIndicator();
+          sessionAnalyzer?.dispose();
+          sessionAnalyzer = null;
 
           // Hide summary controls on error/close
           const summaryControls = document.getElementById('summary-controls');
@@ -499,6 +581,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
             });
           }
         }
+
+        sessionAnalyzer?.handleTransportEvent(event);
       });
 
       session.on('error', (error) => {
@@ -515,6 +599,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           summaryControls.style.display = 'none';
         }
 
+        sessionAnalyzer?.dispose();
+        sessionAnalyzer = null;
         updateConnectionStatus(false);
       });
 
@@ -556,6 +642,9 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     if (summaryControls) {
       summaryControls.style.display = 'none';
     }
+
+    sessionAnalyzer?.dispose();
+    sessionAnalyzer = null;
 
     // Add conversation end marker before disconnecting
     addConversationEndMarker();
