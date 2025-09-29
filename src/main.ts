@@ -7,15 +7,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <h1 class="brand-title">🌟 Weekly Reflection Coaching</h1>
       <div class="header-controls">
         <div class="status-indicator">
-          <span id="status">Disconnected</span>
+          <span id="status">切断済み</span>
           <div id="session-timer" style="display: none; margin-left: 1rem; font-size: 0.9rem; font-weight: 500; color: #3B5C4C;">
-            Session: <span id="timer-display">00:00</span>
+            セッション: <span id="timer-display">00:00</span>
           </div>
         </div>
         <div class="controls">
-          <button id="connect-btn" type="button">Start Coaching Session</button>
-          <button id="disconnect-btn" type="button" disabled>End Session</button>
-          <button id="new-session-btn" type="button" style="display: none;">Start New Reflection</button>
+          <button id="connect-btn" type="button">コーチングセッション開始</button>
+          <button id="disconnect-btn" type="button" disabled>セッション終了</button>
+          <button id="new-session-btn" type="button" style="display: none;">新しい振り返りを開始</button>
         </div>
       </div>
     </header>
@@ -34,17 +34,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </div>
         </div>
         <div class="instructions" id="instructions">
-          <p><strong>🎯 Your Weekly Reflection Session</strong></p>
-          <p>Click "Start Coaching Session" and allow microphone access to begin your guided weekly reflection with an ICF-certified coaching approach.</p>
-          <p><strong>📋 Session Structure (about 10 minutes):</strong></p>
+          <p><strong>🎯 あなたの週次振り返りセッション</strong></p>
+          <p>「コーチングセッション開始」をクリックしてマイクアクセスを許可すると、ICF認定コーチングアプローチによるガイド付き週次振り返りが始まります。</p>
+          <p><strong>📋 セッション構成（約10分間）：</strong></p>
           <ul style="text-align: left; margin: 0.5rem 0; padding-left: 1.5rem;">
-            <li><strong>Opening:</strong> Setting intention and focus</li>
-            <li><strong>Deep Reflection:</strong> Exploring your week's experiences</li>
-            <li><strong>Insight Synthesis:</strong> Identifying key learnings</li>
-            <li><strong>Forward Integration:</strong> Planning intentional action</li>
+            <li><strong>オープニング：</strong> 意図とフォーカスの設定</li>
+            <li><strong>深い振り返り：</strong> あなたの一週間の体験を探求</li>
+            <li><strong>洞察の統合：</strong> 重要な学びの特定</li>
+            <li><strong>前進的統合：</strong> 意図的なアクションの計画</li>
           </ul>
-          <p><strong>💡 Coaching Approach:</strong> Powerful questions, active listening, and trusting your wisdom to discover insights.</p>
-          <p><strong>Technical:</strong> Ephemeral tokens auto-generated. Ensure server runs on port 3001.</p>
+          <p><strong>💡 コーチングアプローチ：</strong> パワフルな質問、積極的傾聴、そしてあなた自身の知恵を信じて洞察を発見します。</p>
+          <p><strong>技術的情報：</strong> エフェメラルトークンが自動生成されます。サーバーがポート3001で動作していることを確認してください。</p>
         </div>
       </div>
 

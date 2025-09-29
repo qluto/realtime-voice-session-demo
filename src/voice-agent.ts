@@ -97,7 +97,7 @@ export function setupVoiceAgent() {
     const hasUsageData = getHasUsageData();
 
     if (connecting) {
-      statusElement.textContent = 'Connecting...';
+      statusElement.textContent = '接続中...';
       statusIndicator.className = 'status-indicator connecting';
       // Hide all buttons during connection
       connectBtn.style.display = 'none';
@@ -107,7 +107,7 @@ export function setupVoiceAgent() {
       newSessionBtn.style.display = 'none';
       newSessionBtn.disabled = true;
     } else if (connected) {
-      statusElement.textContent = 'Connected';
+      statusElement.textContent = '接続済み';
       statusIndicator.className = 'status-indicator connected';
       // Show only disconnect button when connected
       connectBtn.style.display = 'none';
@@ -117,7 +117,7 @@ export function setupVoiceAgent() {
       newSessionBtn.style.display = 'none';
       newSessionBtn.disabled = true;
     } else {
-      statusElement.textContent = 'Disconnected';
+      statusElement.textContent = '切断済み';
       statusIndicator.className = 'status-indicator disconnected';
       // Show appropriate button when disconnected
       if (hasUsageData) {
@@ -168,7 +168,7 @@ export function setupVoiceAgent() {
   }
 
   async function generateEphemeralToken(): Promise<string> {
-    statusElement.textContent = 'Generating token...';
+    statusElement.textContent = 'トークン生成中...';
 
     try {
       const response = await fetch('http://localhost:3001/api/generate-token', {
@@ -245,12 +245,12 @@ Speak at a natural, calming pace. Allow for pauses and silence to give the clien
 - FACILITATE CLIENT GROWTH: Help translate weekly insights into actionable learning and forward momentum
 
 # Weekly Reflection Conversation Flow
-## Opening & Agenda Setting (2-3 minutes)
+## Opening & Agenda Setting (1-2 minutes)
 Goal: Create safety and establish the session focus
 
 How to respond:
 - Welcome warmly and confirm this is their weekly reflection time
-- Briefly explain the 20-minute structure: reflection → insights → forward planning
+- Briefly explain the 10-minute structure: reflection → insights → forward planning
 - Ask what aspect of their week they'd most like to explore
 
 Sample opening phrases (vary, don't repeat):
@@ -260,7 +260,7 @@ Sample opening phrases (vary, don't repeat):
 
 Exit when: Client shares an initial focus area or significant theme from their week.
 
-## Deep Reflection (8-10 minutes)
+## Deep Reflection (4-5 minutes)
 Goal: Explore the week's experiences, patterns, emotions, and learning
 
 Key ICF-based questioning approaches:
@@ -279,7 +279,7 @@ How to respond:
 
 Exit when: Client has thoroughly explored their week and seems ready to extract insights.
 
-## Insight Synthesis (3-5 minutes)
+## Insight Synthesis (2-3 minutes)
 Goal: Help the client identify key learnings and themes
 
 How to respond:
@@ -289,7 +289,7 @@ How to respond:
 
 Exit when: Client has articulated 1-2 clear insights or learnings.
 
-## Forward Integration (5-7 minutes)
+## Forward Integration (2-3 minutes)
 Goal: Connect insights to future action and growth
 
 How to respond:
@@ -299,7 +299,7 @@ How to respond:
 
 Exit when: Client has identified specific ways to apply their learning.
 
-## Closing (1-2 minutes)
+## Closing (1 minute)
 Goal: Acknowledge the reflection work and close meaningfully
 
 How to respond:
