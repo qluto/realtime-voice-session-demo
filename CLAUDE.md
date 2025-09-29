@@ -26,7 +26,6 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - `src/main.ts` - Main UI setup with coaching session interface
 - `src/voice-agent.ts` - Core voice interaction logic using @openai/agents
 - `src/style.css` - Complete styling with dark/light mode support
-- `icf-core-competencies.ts` - ICF coaching standards reference
 
 **Backend (Express):**
 - `server.js` - Token generation server for OpenAI ephemeral tokens

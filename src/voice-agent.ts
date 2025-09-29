@@ -1,565 +1,34 @@
 import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime';
+import {
+  addMessageToLog,
+  addConversationEndMarker,
+  clearConversationLog,
+  showConversationLog,
+  hideConversationLog
+} from './utils/conversation-logger';
+import {
+  startSessionTimer,
+  stopSessionTimer
+} from './utils/session-timer';
+import {
+  startUsageTracking,
+  stopUsageTracking,
+  resetUsageStats,
+  getHasUsageData
+} from './utils/usage-tracker';
+import {
+  showRecordingIndicator,
+  hideRecordingIndicator,
+  startSpeakingAnimation,
+  stopSpeakingAnimation
+} from './utils/speaking-animation';
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
-let usageInterval: number | null = null;
-let hasUsageData = false;
-let sessionStartTime: Date | null = null;
-let sessionTimerInterval: number | null = null;
-let sessionDuration = 0; // in seconds
 
-// Speaking state management
-let currentSpeakingMessage: HTMLElement | null = null;
-let recordingIndicator: HTMLElement | null = null;
-let lastAssistantMessageId: string | null = null;
 
-// Conversation logging
-function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString('en-US', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-}
 
-function addMessageToLog(role: 'user' | 'assistant', content: string, timestamp?: Date, messageId?: string): HTMLElement {
-  const logContainer = document.getElementById('log-container');
-  if (!logContainer) return document.createElement('div');
 
-  // Prevent duplicate assistant messages
-  if (role === 'assistant' && messageId) {
-    if (lastAssistantMessageId === messageId) {
-      console.log('🔄 Skipping duplicate assistant message:', messageId);
-      const lastMessage = getLastAssistantMessage();
-      return lastMessage || document.createElement('div');
-    }
-    lastAssistantMessageId = messageId;
-  }
-
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message ${role}`;
-  if (messageId) {
-    messageDiv.setAttribute('data-message-id', messageId);
-  }
-
-  const messageHeader = document.createElement('div');
-  messageHeader.className = 'message-header';
-
-  const messageRole = document.createElement('span');
-  messageRole.className = 'message-role';
-  messageRole.textContent = role === 'user' ? '👤 You' : '🤖 Coach';
-
-  const messageTimestamp = document.createElement('span');
-  messageTimestamp.className = 'message-timestamp';
-  messageTimestamp.textContent = formatTimestamp(timestamp || new Date());
-
-  messageHeader.appendChild(messageRole);
-  messageHeader.appendChild(messageTimestamp);
-
-  const messageContent = document.createElement('div');
-  messageContent.className = 'message-content';
-  messageContent.textContent = content;
-
-  messageDiv.appendChild(messageHeader);
-  messageDiv.appendChild(messageContent);
-
-  logContainer.appendChild(messageDiv);
-
-  // Auto-scroll to bottom
-  logContainer.scrollTop = logContainer.scrollHeight;
-
-  return messageDiv;
-}
-
-function addConversationEndMarker() {
-  const logContainer = document.getElementById('log-container');
-  if (!logContainer) return;
-
-  const endMarkerDiv = document.createElement('div');
-  endMarkerDiv.className = 'conversation-end-marker';
-  endMarkerDiv.textContent = '-- conversation ended --';
-
-  logContainer.appendChild(endMarkerDiv);
-
-  // Auto-scroll to bottom
-  logContainer.scrollTop = logContainer.scrollHeight;
-}
-
-function clearConversationLog() {
-  const logContainer = document.getElementById('log-container');
-  if (logContainer) {
-    logContainer.innerHTML = '';
-  }
-  // Reset speaking animation state
-  stopSpeakingAnimation();
-  hideRecordingIndicator();
-  lastAssistantMessageId = null;
-
-  // Hide summary controls when clearing conversation
-  const summaryControls = document.getElementById('summary-controls');
-  if (summaryControls) {
-    summaryControls.style.display = 'none';
-  }
-}
-
-function showConversationLog() {
-  const conversationLog = document.getElementById('conversation-log');
-  const instructions = document.getElementById('instructions');
-
-  if (conversationLog) {
-    conversationLog.style.display = 'block';
-  }
-  if (instructions) {
-    instructions.style.display = 'none';
-  }
-}
-
-function hideConversationLog() {
-  const conversationLog = document.getElementById('conversation-log');
-  const instructions = document.getElementById('instructions');
-
-  // Only hide conversation log if there are no messages
-  const logContainer = document.getElementById('log-container');
-  const hasMessages = logContainer && logContainer.children.length > 0;
-
-  if (conversationLog && !hasMessages) {
-    conversationLog.style.display = 'none';
-  }
-  if (instructions && !hasUsageData && !hasMessages) {
-    instructions.style.display = 'block';
-  }
-}
-
-// Speaking animation functions
-function showRecordingIndicator() {
-  if (recordingIndicator) return; // Already showing
-
-  const logContainer = document.getElementById('log-container');
-  if (!logContainer) return;
-
-  recordingIndicator = document.createElement('div');
-  recordingIndicator.className = 'recording-indicator';
-  recordingIndicator.innerHTML = `
-    <span class="coach-icon">🧘‍♀️</span>
-    コーチが聞いています
-    <span class="dots">
-      <span>.</span>
-      <span>.</span>
-      <span>.</span>
-    </span>
-  `;
-
-  logContainer.appendChild(recordingIndicator);
-  logContainer.scrollTop = logContainer.scrollHeight;
-
-  // Show conversation log if it's hidden
-  showConversationLog();
-}
-
-function hideRecordingIndicator() {
-  if (recordingIndicator && recordingIndicator.parentNode) {
-    recordingIndicator.parentNode.removeChild(recordingIndicator);
-    recordingIndicator = null;
-  }
-}
-
-function startSpeakingAnimation(messageElement: HTMLElement) {
-  // Stop any previous speaking animation
-  stopSpeakingAnimation();
-
-  currentSpeakingMessage = messageElement;
-  currentSpeakingMessage.classList.add('speaking');
-  console.log('🎵 Started speaking animation');
-}
-
-function stopSpeakingAnimation() {
-  if (currentSpeakingMessage) {
-    currentSpeakingMessage.classList.remove('speaking');
-    currentSpeakingMessage = null;
-    console.log('🎵 Stopped speaking animation');
-  }
-}
-
-function getLastAssistantMessage(): HTMLElement | null {
-  const logContainer = document.getElementById('log-container');
-  if (!logContainer) return null;
-
-  const messages = logContainer.querySelectorAll('.message.assistant');
-  return messages.length > 0 ? messages[messages.length - 1] as HTMLElement : null;
-}
-
-// OpenAI Audio Pricing (per 1M tokens) - Updated as of latest pricing
-const OPENAI_PRICING = {
-  'gpt-realtime': {
-    input: 32.00,
-    cachedInput: 0.40,
-    output: 64.00
-  },
-  'gpt-4o-realtime-preview': {
-    input: 40.00,
-    cachedInput: 2.50,
-    output: 80.00
-  },
-  'gpt-4o-mini-realtime-preview': {
-    input: 10.00,
-    cachedInput: 0.30,
-    output: 20.00
-  },
-  'gpt-audio': {
-    input: 40.00,
-    cachedInput: 0,
-    output: 80.00
-  },
-  'gpt-4o-audio-preview': {
-    input: 40.00,
-    cachedInput: 0,
-    output: 80.00
-  },
-  'gpt-4o-mini-audio-preview': {
-    input: 10.00,
-    cachedInput: 0,
-    output: 20.00
-  }
-} as const;
-
-function formatTime(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-}
-
-function startSessionTimer() {
-  sessionStartTime = new Date();
-  sessionDuration = 0;
-
-  // Update timer display every second
-  sessionTimerInterval = setInterval(() => {
-    if (sessionStartTime) {
-      sessionDuration = Math.floor((new Date().getTime() - sessionStartTime.getTime()) / 1000);
-      const timerDisplay = document.getElementById('timer-display');
-      if (timerDisplay) {
-        timerDisplay.textContent = formatTime(sessionDuration);
-      }
-    }
-  }, 1000) as unknown as number;
-
-  // Show timer display
-  const timerElement = document.getElementById('session-timer');
-  if (timerElement) {
-    timerElement.style.display = 'block';
-  }
-}
-
-function stopSessionTimer() {
-  if (sessionTimerInterval) {
-    clearInterval(sessionTimerInterval);
-    sessionTimerInterval = null;
-  }
-
-  // Calculate final duration
-  if (sessionStartTime) {
-    sessionDuration = Math.floor((new Date().getTime() - sessionStartTime.getTime()) / 1000);
-  }
-
-  // Hide timer display
-  const timerElement = document.getElementById('session-timer');
-  if (timerElement) {
-    timerElement.style.display = 'none';
-  }
-
-  // Update final duration in stats
-  const durationElement = document.getElementById('stat-session-duration');
-  if (durationElement) {
-    durationElement.textContent = formatTime(sessionDuration);
-  }
-}
-
-function resetSessionTimer() {
-  sessionStartTime = null;
-  sessionDuration = 0;
-
-  // Reset timer display
-  const timerDisplay = document.getElementById('timer-display');
-  if (timerDisplay) {
-    timerDisplay.textContent = '00:00';
-  }
-
-  // Reset duration in stats
-  const durationElement = document.getElementById('stat-session-duration');
-  if (durationElement) {
-    durationElement.textContent = '00:00';
-  }
-
-  // Hide timer
-  const timerElement = document.getElementById('session-timer');
-  if (timerElement) {
-    timerElement.style.display = 'none';
-  }
-}
-
-function calculateCost(usage: any, modelName: string = 'gpt-realtime') {
-  const pricing = OPENAI_PRICING[modelName as keyof typeof OPENAI_PRICING] || OPENAI_PRICING['gpt-realtime'];
-
-  // Initialize token counters
-  let totalCachedTokens = 0;
-  let totalTextTokens = 0;
-  let totalAudioTokens = 0;
-  let totalNonCachedTokens = usage.inputTokens;
-
-  // Check if using new detailed token structure
-  if (usage.inputTokensDetails && usage.inputTokensDetails.length > 0) {
-    usage.inputTokensDetails.forEach((details: any) => {
-      // Handle new structure with text_tokens, audio_tokens, cached_tokens
-      if (details.text_tokens !== undefined || details.audio_tokens !== undefined) {
-        totalTextTokens += details.text_tokens || 0;
-        totalAudioTokens += details.audio_tokens || 0;
-
-        // Handle cached tokens - could be in cached_tokens or cached_tokens_details
-        if (details.cached_tokens !== undefined) {
-          totalCachedTokens += details.cached_tokens;
-        } else if (details.cached_tokens_details) {
-          totalCachedTokens += (details.cached_tokens_details.text_tokens || 0) +
-                              (details.cached_tokens_details.audio_tokens || 0);
-        }
-      } else {
-        // Handle old structure
-        totalCachedTokens += details.cached_tokens || 0;
-      }
-    });
-
-    // Non-cached tokens = total input - cached tokens
-    totalNonCachedTokens = Math.max(0, usage.inputTokens - totalCachedTokens);
-  }
-
-  // Calculate costs (pricing is per 1M tokens)
-  const inputCost = (totalNonCachedTokens / 1_000_000) * pricing.input;
-  const cachedInputCost = (totalCachedTokens / 1_000_000) * pricing.cachedInput;
-  const outputCost = (usage.outputTokens / 1_000_000) * pricing.output;
-  const totalCost = inputCost + cachedInputCost + outputCost;
-
-  return {
-    inputCost,
-    cachedInputCost,
-    outputCost,
-    totalCost,
-    totalCachedTokens,
-    totalNonCachedTokens,
-    totalTextTokens,
-    totalAudioTokens,
-    savings: ((totalCachedTokens / 1_000_000) * (pricing.input - pricing.cachedInput))
-  };
-}
-
-function updateUIUsageStats() {
-  if (!session) return;
-
-  const usage = session.usage;
-
-  // Calculate cost breakdown
-  const costBreakdown = calculateCost(usage, 'gpt-realtime');
-
-  // Update usage stats UI elements
-  const requestsEl = document.getElementById('stat-requests');
-  const inputTokensEl = document.getElementById('stat-input-tokens');
-  const outputTokensEl = document.getElementById('stat-output-tokens');
-  const totalTokensEl = document.getElementById('stat-total-tokens');
-  const cachedTokensEl = document.getElementById('stat-cached-tokens');
-  const textTokensEl = document.getElementById('stat-text-tokens');
-  const audioTokensEl = document.getElementById('stat-audio-tokens');
-
-  if (requestsEl) requestsEl.textContent = usage.requests.toString();
-  if (inputTokensEl) inputTokensEl.textContent = usage.inputTokens.toString();
-  if (outputTokensEl) outputTokensEl.textContent = usage.outputTokens.toString();
-  if (totalTokensEl) totalTokensEl.textContent = usage.totalTokens.toString();
-  if (cachedTokensEl) {
-    cachedTokensEl.textContent = costBreakdown.totalCachedTokens.toString();
-    cachedTokensEl.className = costBreakdown.totalCachedTokens > 0 ? 'stat-value cached' : 'stat-value';
-  }
-  if (textTokensEl) {
-    textTokensEl.textContent = costBreakdown.totalTextTokens.toString();
-  }
-  if (audioTokensEl) {
-    audioTokensEl.textContent = costBreakdown.totalAudioTokens.toString();
-    audioTokensEl.className = costBreakdown.totalAudioTokens > 0 ? 'stat-value' : 'stat-value';
-  }
-
-  // Update cost UI elements
-  const inputCostEl = document.getElementById('cost-input');
-  const cachedInputCostEl = document.getElementById('cost-cached-input');
-  const outputCostEl = document.getElementById('cost-output');
-  const totalCostEl = document.getElementById('cost-total');
-  const savingsEl = document.getElementById('cost-savings');
-
-  if (inputCostEl) inputCostEl.textContent = `$${costBreakdown.inputCost.toFixed(4)}`;
-  if (cachedInputCostEl) cachedInputCostEl.textContent = `$${costBreakdown.cachedInputCost.toFixed(4)}`;
-  if (outputCostEl) outputCostEl.textContent = `$${costBreakdown.outputCost.toFixed(4)}`;
-  if (totalCostEl) totalCostEl.textContent = `$${costBreakdown.totalCost.toFixed(4)}`;
-  if (savingsEl) {
-    savingsEl.textContent = `$${costBreakdown.savings.toFixed(4)}`;
-    savingsEl.className = costBreakdown.savings > 0 ? 'cost-value' : 'cost-value';
-  }
-
-  // Mark that we have usage data
-  hasUsageData = true;
-
-  // Show/hide summary button based on requests count (4+ exchanges)
-  updateSummaryButtonVisibility();
-}
-
-function updateSummaryButtonVisibility() {
-  if (!session) return;
-
-  const summaryControls = document.getElementById('summary-controls');
-  if (!summaryControls) return;
-
-  // Show summary button after 4+ requests (indicating sufficient exchange)
-  if (session.usage.requests >= 4 && isConnected) {
-    summaryControls.style.display = 'block';
-  } else {
-    summaryControls.style.display = 'none';
-  }
-}
-
-function logUsageInfo() {
-  if (!session) return;
-
-  const usage = session.usage;
-
-  console.group('🔍 OpenAI API Usage Statistics');
-  console.log(`⏱️  Session Duration: ${formatTime(sessionDuration)}`);
-  console.log(`📊 Requests: ${usage.requests}`);
-  console.log(`📥 Input Tokens: ${usage.inputTokens}`);
-  console.log(`📤 Output Tokens: ${usage.outputTokens}`);
-  console.log(`🔢 Total Tokens: ${usage.totalTokens}`);
-
-  // Log the complete usage object to understand the structure
-  console.log('🔍 Complete Usage Object:', JSON.stringify(usage, null, 2));
-
-  if (usage.inputTokensDetails && usage.inputTokensDetails.length > 0) {
-    console.log('📋 Input Token Details:');
-    usage.inputTokensDetails.forEach((details, index) => {
-      console.log(`  Request ${index + 1}:`, details);
-      if (details.cached_tokens) {
-        console.log(`    🚀 Cached Input Tokens: ${details.cached_tokens}`);
-      }
-      // Check for new structure
-      if (details.text_tokens) {
-        console.log(`    📝 Text Tokens: ${details.text_tokens}`);
-      }
-      if (details.audio_tokens) {
-        console.log(`    🎵 Audio Tokens: ${details.audio_tokens}`);
-      }
-      if (details.cached_tokens_details) {
-        console.log(`    🚀 Cached Tokens Details:`, details.cached_tokens_details);
-      }
-    });
-  }
-
-  if (usage.outputTokensDetails && usage.outputTokensDetails.length > 0) {
-    console.log('📋 Output Token Details:');
-    usage.outputTokensDetails.forEach((details, index) => {
-      console.log(`  Request ${index + 1}:`, details);
-      if (details.text_tokens) {
-        console.log(`    📝 Text Tokens: ${details.text_tokens}`);
-      }
-      if (details.audio_tokens) {
-        console.log(`    🎵 Audio Tokens: ${details.audio_tokens}`);
-      }
-    });
-  }
-
-  // Calculate cost breakdown with current understanding
-  const costBreakdown = calculateCost(usage, 'gpt-realtime');
-
-  // Enhanced token breakdown
-  if (costBreakdown.totalTextTokens > 0 || costBreakdown.totalAudioTokens > 0) {
-    console.log('🎯 Token Type Breakdown:');
-    console.log(`  📝 Text Tokens: ${costBreakdown.totalTextTokens}`);
-    console.log(`  🎵 Audio Tokens: ${costBreakdown.totalAudioTokens}`);
-  }
-
-  // Cost breakdown
-  console.log('💰 Cost Breakdown (gpt-realtime pricing):');
-  console.log(`  💸 Input Cost: $${costBreakdown.inputCost.toFixed(4)} (${costBreakdown.totalNonCachedTokens} tokens @ $32.00/1M)`);
-  console.log(`  🚀 Cached Input Cost: $${costBreakdown.cachedInputCost.toFixed(4)} (${costBreakdown.totalCachedTokens} tokens @ $0.40/1M)`);
-  console.log(`  📤 Output Cost: $${costBreakdown.outputCost.toFixed(4)} (${usage.outputTokens} tokens @ $64.00/1M)`);
-  console.log(`  🔢 Total Cost: $${costBreakdown.totalCost.toFixed(4)}`);
-  if (costBreakdown.savings > 0) {
-    console.log(`  💰 Cache Savings: $${costBreakdown.savings.toFixed(4)} (${((costBreakdown.savings / (costBreakdown.totalCost + costBreakdown.savings)) * 100).toFixed(1)}% saved)`);
-  }
-
-  console.groupEnd();
-
-  // Update UI
-  updateUIUsageStats();
-}
-
-function resetUsageStats() {
-  // Reset session timer
-  resetSessionTimer();
-
-  // Reset all usage statistics in UI
-  const requestsEl = document.getElementById('stat-requests');
-  const inputTokensEl = document.getElementById('stat-input-tokens');
-  const outputTokensEl = document.getElementById('stat-output-tokens');
-  const totalTokensEl = document.getElementById('stat-total-tokens');
-  const cachedTokensEl = document.getElementById('stat-cached-tokens');
-  const textTokensEl = document.getElementById('stat-text-tokens');
-  const audioTokensEl = document.getElementById('stat-audio-tokens');
-
-  if (requestsEl) requestsEl.textContent = '0';
-  if (inputTokensEl) inputTokensEl.textContent = '0';
-  if (outputTokensEl) outputTokensEl.textContent = '0';
-  if (totalTokensEl) totalTokensEl.textContent = '0';
-  if (cachedTokensEl) {
-    cachedTokensEl.textContent = '0';
-    cachedTokensEl.className = 'stat-value';
-  }
-  if (textTokensEl) textTokensEl.textContent = '0';
-  if (audioTokensEl) audioTokensEl.textContent = '0';
-
-  // Reset all cost elements
-  const inputCostEl = document.getElementById('cost-input');
-  const cachedInputCostEl = document.getElementById('cost-cached-input');
-  const outputCostEl = document.getElementById('cost-output');
-  const totalCostEl = document.getElementById('cost-total');
-  const savingsEl = document.getElementById('cost-savings');
-
-  if (inputCostEl) inputCostEl.textContent = '$0.00';
-  if (cachedInputCostEl) cachedInputCostEl.textContent = '$0.00';
-  if (outputCostEl) outputCostEl.textContent = '$0.00';
-  if (totalCostEl) totalCostEl.textContent = '$0.00';
-  if (savingsEl) savingsEl.textContent = '$0.00';
-
-  hasUsageData = false;
-}
-
-function startUsageTracking() {
-  if (usageInterval) {
-    clearInterval(usageInterval);
-  }
-
-  // Log usage every 10 seconds while connected
-  usageInterval = setInterval(() => {
-    logUsageInfo();
-  }, 10000) as unknown as number;
-
-  // Log immediately when starting
-  setTimeout(logUsageInfo, 1000);
-}
-
-function stopUsageTracking() {
-  if (usageInterval) {
-    clearInterval(usageInterval);
-    usageInterval = null;
-  }
-
-  // Log final usage when disconnecting
-  if (session) {
-    logUsageInfo();
-  }
-}
 
 export function setupVoiceAgent() {
   const connectBtn = document.querySelector<HTMLButtonElement>('#connect-btn')!;
@@ -625,6 +94,7 @@ export function setupVoiceAgent() {
 
   function updateConnectionStatus(connected: boolean, connecting: boolean = false) {
     isConnected = connected;
+    const hasUsageData = getHasUsageData();
 
     if (connecting) {
       statusElement.textContent = 'Connecting...';
@@ -659,7 +129,7 @@ export function setupVoiceAgent() {
     if (connected) {
       showConversationLog();
     } else {
-      hideConversationLog();
+      hideConversationLog(hasUsageData);
     }
 
     // Update usage stats title when disconnected but showing final stats
@@ -898,11 +368,11 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         if (event.type === 'session.created') {
           console.log('Connected to OpenAI Realtime API');
           updateConnectionStatus(true);
-          startUsageTracking();
+          startUsageTracking(session!);
           startSessionTimer();
         } else if (event.type === 'error' || event.type === 'close') {
           console.log('Disconnected from OpenAI Realtime API');
-          stopUsageTracking();
+          stopUsageTracking(session);
           stopSessionTimer();
           stopSpeakingAnimation();
           hideRecordingIndicator();
@@ -1015,7 +485,7 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
       session.on('error', (error) => {
         console.error('Session error:', error);
         alert(`Error: ${error.error || 'Unknown error occurred'}`);
-        stopUsageTracking();
+        stopUsageTracking(session);
         stopSessionTimer();
         stopSpeakingAnimation();
         hideRecordingIndicator();
@@ -1054,7 +524,7 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     console.log('Disconnecting from voice agent...');
 
     // Stop usage tracking and log final stats
-    stopUsageTracking();
+    stopUsageTracking(session);
     // Stop session timer
     stopSessionTimer();
 
