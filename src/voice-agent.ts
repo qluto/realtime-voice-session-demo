@@ -37,7 +37,6 @@ export function setupVoiceAgent() {
   const connectBtn = document.querySelector<HTMLButtonElement>('#connect-btn')!;
   const disconnectBtn = document.querySelector<HTMLButtonElement>('#disconnect-btn')!;
   const newSessionBtn = document.querySelector<HTMLButtonElement>('#new-session-btn')!;
-  const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn')!;
   const statusElement = document.querySelector<HTMLSpanElement>('#status')!;
   const statusIndicator = document.querySelector('.status-indicator')!
   const progressPanel = document.querySelector<HTMLElement>('#progress-panel')
@@ -84,10 +83,6 @@ export function setupVoiceAgent() {
         }]
       });
 
-      const summaryControls = document.getElementById('summary-controls');
-      if (summaryControls) {
-        summaryControls.style.display = 'none';
-      }
       if (closureSuggestionEl) {
         closureSuggestionEl.style.display = 'none';
       }
@@ -123,9 +118,6 @@ export function setupVoiceAgent() {
     }
   });
 
-  requestSummaryBtn.addEventListener('click', async () => {
-    await requestSessionSummary(false);
-  });
 
   if (autoSummaryToggle) {
     autoSummaryToggle.addEventListener('change', () => {
@@ -478,11 +470,6 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           sessionAnalyzer?.dispose();
           sessionAnalyzer = null;
 
-          // Hide summary controls on error/close
-          const summaryControls = document.getElementById('summary-controls');
-          if (summaryControls) {
-            summaryControls.style.display = 'none';
-          }
 
           updateConnectionStatus(false);
         } else if (event.type === 'input_audio_buffer.speech_started') {
@@ -593,11 +580,6 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         stopSpeakingAnimation();
         hideRecordingIndicator();
 
-        // Hide summary controls on error
-        const summaryControls = document.getElementById('summary-controls');
-        if (summaryControls) {
-          summaryControls.style.display = 'none';
-        }
 
         sessionAnalyzer?.dispose();
         sessionAnalyzer = null;
@@ -637,11 +619,6 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
     stopSpeakingAnimation();
     hideRecordingIndicator();
 
-    // Hide summary controls on disconnect
-    const summaryControls = document.getElementById('summary-controls');
-    if (summaryControls) {
-      summaryControls.style.display = 'none';
-    }
 
     sessionAnalyzer?.dispose();
     sessionAnalyzer = null;
