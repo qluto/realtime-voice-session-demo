@@ -27,10 +27,60 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <div class="log-container" id="log-container">
             <!-- Messages will appear here -->
           </div>
-          <div class="summary-controls" id="summary-controls" style="display: none;">
-            <button id="request-summary-btn" type="button" class="summary-btn">
-              📝 セッションのまとめを要求
-            </button>
+        </div>
+        <div class="progress-panel" id="progress-panel" style="display: none;">
+          <div class="progress-header">
+            <span class="progress-title">📈 セッション進行度</span>
+            <label class="auto-summary-toggle" for="auto-summary-toggle">
+              <input id="auto-summary-toggle" type="checkbox" checked />
+              自動まとめ提案
+            </label>
+          </div>
+          <div class="summary-progress" id="summary-progress">
+            <div class="phase-row" data-phase="opening">
+              <span class="phase-label">オープニング</span>
+              <div class="phase-bar">
+                <div class="phase-fill" data-phase-fill="opening"></div>
+              </div>
+              <span class="phase-score" data-phase-score="opening">0%</span>
+            </div>
+            <div class="phase-row" data-phase="reflection">
+              <span class="phase-label">深い振り返り</span>
+              <div class="phase-bar">
+                <div class="phase-fill" data-phase-fill="reflection"></div>
+              </div>
+              <span class="phase-score" data-phase-score="reflection">0%</span>
+            </div>
+            <div class="phase-row" data-phase="insight">
+              <span class="phase-label">洞察の統合</span>
+              <div class="phase-bar">
+                <div class="phase-fill" data-phase-fill="insight"></div>
+              </div>
+              <span class="phase-score" data-phase-score="insight">0%</span>
+            </div>
+            <div class="phase-row" data-phase="integration">
+              <span class="phase-label">前進的統合</span>
+              <div class="phase-bar">
+                <div class="phase-fill" data-phase-fill="integration"></div>
+              </div>
+              <span class="phase-score" data-phase-score="integration">0%</span>
+            </div>
+            <div class="phase-row" data-phase="closing">
+              <span class="phase-label">クロージング</span>
+              <div class="phase-bar">
+                <div class="phase-fill" data-phase-fill="closing"></div>
+              </div>
+              <span class="phase-score" data-phase-score="closing">0%</span>
+            </div>
+          </div>
+          <div class="current-phase" id="current-phase" aria-live="polite">現在のフェーズ: オープニングを探索中</div>
+          <div class="progress-notes" id="progress-notes"></div>
+          <div class="closure-suggestion" id="closure-suggestion" style="display: none;">
+            <div class="closure-message" id="closure-message"></div>
+            <div class="closure-actions">
+              <button id="accept-summary-btn" type="button" class="closure-btn primary">まとめに移行する</button>
+              <button id="continue-session-btn" type="button" class="closure-btn secondary">まだ続ける</button>
+            </div>
           </div>
         </div>
         <div class="instructions" id="instructions">
