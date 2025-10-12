@@ -22,7 +22,11 @@ export function showRecordingIndicator() {
   `;
 
   logContainer.appendChild(recordingIndicator);
-  logContainer.scrollTop = logContainer.scrollHeight;
+  if (typeof logContainer.scrollTo === 'function') {
+    logContainer.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
+  } else {
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
 
   // Show conversation log if it's hidden
   showConversationLog();

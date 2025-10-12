@@ -69,7 +69,7 @@ export function updateSummaryButtonVisibility(session: RealtimeSession, isConnec
 
   // Show summary button after 4+ requests (indicating sufficient exchange)
   if (session.usage.requests >= 4 && isConnected) {
-    summaryControls.style.display = 'block';
+    summaryControls.style.display = 'flex';
   } else {
     summaryControls.style.display = 'none';
   }

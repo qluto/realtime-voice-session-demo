@@ -47,6 +47,8 @@ export function setupVoiceAgent() {
   const autoSummaryToggle = document.querySelector<HTMLInputElement>('#auto-summary-toggle')
   const acceptSummaryBtn = document.querySelector<HTMLButtonElement>('#accept-summary-btn')
   const continueSessionBtn = document.querySelector<HTMLButtonElement>('#continue-session-btn')
+  const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn');
+  const copyTranscriptBtn = document.querySelector<HTMLButtonElement>('#copy-transcript-btn');
 
   const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
     opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
@@ -145,6 +147,84 @@ export function setupVoiceAgent() {
     });
   }
 
+  if (requestSummaryBtn) {
+    requestSummaryBtn.addEventListener('click', () => {
+      requestSessionSummary(false);
+    });
+  }
+
+  if (copyTranscriptBtn) {
+    copyTranscriptBtn.addEventListener('click', async () => {
+      const logContainer = document.getElementById('log-container');
+      if (!logContainer) return;
+
+      const messages = Array.from(logContainer.querySelectorAll<HTMLElement>('.message'));
+      if (messages.length === 0) return;
+
+      const transcript = messages
+        .map((message) => {
+          const role = message.classList.contains('user') ? 'You' : 'Coach';
+          const timestamp = message.querySelector<HTMLElement>('.message-timestamp')?.textContent?.trim();
+          const content = message.querySelector<HTMLElement>('.message-content')?.textContent?.trim() || '';
+          const header = timestamp ? `[${timestamp}] ${role}` : role;
+          return `${header}\n${content}`;
+        })
+        .join('\n\n');
+
+      const tryClipboard = async () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(transcript);
+          return true;
+        }
+        return false;
+      };
+
+      let copied = false;
+      try {
+        copied = transcript.length > 0 ? await tryClipboard() : false;
+      } catch (error) {
+        console.error('Failed to write transcript via clipboard API:', error);
+        copied = false;
+      }
+
+      if (!copied && transcript.length > 0) {
+        const helper = document.createElement('textarea');
+        helper.value = transcript;
+        helper.setAttribute('readonly', 'true');
+        helper.style.position = 'absolute';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        helper.select();
+        try {
+          copied = document.execCommand('copy');
+        } catch (error) {
+          console.error('Fallback copy failed:', error);
+          copied = false;
+        } finally {
+          document.body.removeChild(helper);
+        }
+      }
+
+      if (copied) {
+        copyTranscriptBtn.classList.add('copied');
+        const originalLabel = copyTranscriptBtn.getAttribute('data-label') || copyTranscriptBtn.innerHTML;
+        if (!copyTranscriptBtn.getAttribute('data-label')) {
+          copyTranscriptBtn.setAttribute('data-label', originalLabel);
+        }
+        copyTranscriptBtn.innerHTML = '<span aria-hidden="true">✅</span><span>コピーしました</span>';
+        setTimeout(() => {
+          const saved = copyTranscriptBtn.getAttribute('data-label');
+          if (saved) {
+            copyTranscriptBtn.innerHTML = saved;
+          }
+          copyTranscriptBtn.classList.remove('copied');
+        }, 2000);
+      } else {
+        alert('コピーに失敗しました。ブラウザ設定をご確認ください。');
+      }
+    });
+  }
+
   function updateConnectionStatus(connected: boolean, connecting: boolean = false) {
     isConnected = connected;
     const hasUsageData = getHasUsageData();
@@ -194,7 +274,7 @@ export function setupVoiceAgent() {
     const usageStatsEl = document.getElementById('usage-stats');
     if (usageStatsEl) {
       // Show if connected OR if we have usage data from a previous session
-      usageStatsEl.style.display = (connected || hasUsageData) ? 'block' : 'none';
+      usageStatsEl.style.display = (connected || hasUsageData) ? 'flex' : 'none';
     }
 
     // Show/hide conversation log based on connection status
