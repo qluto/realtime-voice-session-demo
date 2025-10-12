@@ -53,7 +53,13 @@ export function addMessageToLog(role: 'user' | 'assistant', content: string, tim
   logContainer.appendChild(messageDiv);
 
   // Auto-scroll to bottom
-  logContainer.scrollTop = logContainer.scrollHeight;
+  if (typeof logContainer.scrollTo === 'function') {
+    logContainer.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
+  } else {
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  updateTranscriptCopyButtonVisibility();
 
   return messageDiv;
 }
@@ -69,7 +75,13 @@ export function addConversationEndMarker() {
   logContainer.appendChild(endMarkerDiv);
 
   // Auto-scroll to bottom
-  logContainer.scrollTop = logContainer.scrollHeight;
+  if (typeof logContainer.scrollTo === 'function') {
+    logContainer.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
+  } else {
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  updateTranscriptCopyButtonVisibility();
 }
 
 export function clearConversationLog() {
@@ -84,6 +96,8 @@ export function clearConversationLog() {
   if (summaryControls) {
     summaryControls.style.display = 'none';
   }
+
+  updateTranscriptCopyButtonVisibility();
 }
 
 export function showConversationLog() {
@@ -91,7 +105,7 @@ export function showConversationLog() {
   const instructions = document.getElementById('instructions');
 
   if (conversationLog) {
-    conversationLog.style.display = 'block';
+    conversationLog.style.display = 'flex';
   }
   if (instructions) {
     instructions.style.display = 'none';
@@ -112,6 +126,10 @@ export function hideConversationLog(hasUsageData: boolean) {
   if (instructions && !hasUsageData && !hasMessages) {
     instructions.style.display = 'block';
   }
+
+  if (!hasMessages) {
+    updateTranscriptCopyButtonVisibility();
+  }
 }
 
 export function getLastAssistantMessage(): HTMLElement | null {
@@ -120,4 +138,25 @@ export function getLastAssistantMessage(): HTMLElement | null {
 
   const messages = logContainer.querySelectorAll('.message.assistant');
   return messages.length > 0 ? messages[messages.length - 1] as HTMLElement : null;
+}
+
+function updateTranscriptCopyButtonVisibility() {
+  const copyButton = document.getElementById('copy-transcript-btn') as HTMLButtonElement | null;
+  if (!copyButton) return;
+
+  const logContainer = document.getElementById('log-container');
+  const hasMessages = !!logContainer && logContainer.querySelector('.message');
+
+  if (!copyButton.dataset.defaultLabel) {
+    copyButton.dataset.defaultLabel = copyButton.innerHTML;
+  }
+
+  copyButton.style.display = hasMessages ? 'inline-flex' : 'none';
+
+  if (!hasMessages) {
+    copyButton.classList.remove('copied');
+    if (copyButton.dataset.defaultLabel) {
+      copyButton.innerHTML = copyButton.dataset.defaultLabel;
+    }
+  }
 }

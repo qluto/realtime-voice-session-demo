@@ -151,12 +151,7 @@ export class SessionAnalyzer {
     this.processedEventIds.clear()
     this.pendingScore = false
     this.pendingScoreEventId = null
-    this.hideClosureSuggestion()
-    if (this.controls.panel) {
-      this.controls.panel.classList.add('hidden')
-      this.controls.panel.style.display = 'none'
-    }
-    this.resetScores()
+    // keep current UI state visible until a new session begins
   }
 
   private handleSessionCreated() {
