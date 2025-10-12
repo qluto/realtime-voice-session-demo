@@ -1,4 +1,5 @@
 import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime';
+import { tool } from '@openai/agents-core';
 import {
   addMessageToLog,
   addConversationEndMarker,
@@ -24,10 +25,112 @@ import {
 } from './utils/speaking-animation';
 import { SessionAnalyzer } from './session-analyzer';
 import type { PhaseKey } from './session-analyzer';
+import { z } from 'zod';
+import { transformGoogleCalendarData } from './services/google-calendar-service';
+import { transformGitHubData } from './services/github-service';
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
 let sessionAnalyzer: SessionAnalyzer | null = null;
+
+type IntegrationKey = 'googleCalendar' | 'github';
+type IntegrationServiceId = 'google_calendar' | 'github';
+
+export interface IntegrationSnapshot {
+  timeframe: string;
+  summary: string;
+  totals: Record<string, number>;
+  highlights: Array<{
+    title: string;
+    insight: string;
+    impact?: string;
+    reflectionPrompt: string;
+  }>;
+  reflectionPrompts: string[];
+  recommendations: string[];
+  details: Record<string, unknown>;
+  generatedAt: string;
+}
+
+interface IntegrationInfo {
+  key: IntegrationKey;
+  service: IntegrationServiceId;
+  displayName: string;
+  connected: boolean;
+  connectedSince: Date | null;
+  lastSynced: Date | null;
+  snapshot: IntegrationSnapshot | null;
+}
+
+const SERVICE_ID_BY_KEY: Record<IntegrationKey, IntegrationServiceId> = {
+  googleCalendar: 'google_calendar',
+  github: 'github'
+};
+
+const KEY_BY_SERVICE_ID: Record<IntegrationServiceId, IntegrationKey> = {
+  google_calendar: 'googleCalendar',
+  github: 'github'
+};
+
+function formatDateForLabel(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekRangeLabel(now = new Date()): string {
+  const start = new Date(now);
+  const currentDay = start.getDay();
+  const diffToMonday = (currentDay === 0 ? -6 : 1) - currentDay;
+  start.setDate(start.getDate() + diffToMonday);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return `${formatDateForLabel(start)} to ${formatDateForLabel(end)}`;
+}
+
+async function fetchGoogleCalendarSnapshot(): Promise<IntegrationSnapshot | null> {
+  try {
+    const response = await fetch('http://localhost:3001/api/snapshot/google-calendar', {
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      console.warn('Google Calendar snapshot not available:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return transformGoogleCalendarData(data);
+  } catch (error) {
+    console.error('Failed to fetch Google Calendar snapshot:', error);
+    return null;
+  }
+}
+
+async function fetchGitHubSnapshot(): Promise<IntegrationSnapshot | null> {
+  try {
+    const response = await fetch('http://localhost:3001/api/snapshot/github', {
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      console.warn('GitHub snapshot not available:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return transformGitHubData(data);
+  } catch (error) {
+    console.error('Failed to fetch GitHub snapshot:', error);
+    return null;
+  }
+}
+
+function formatSyncTimestamp(date: Date | null): string {
+  if (!date) return '';
+  return `${formatDateForLabel(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 
 
@@ -49,6 +152,251 @@ export function setupVoiceAgent() {
   const continueSessionBtn = document.querySelector<HTMLButtonElement>('#continue-session-btn')
   const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn');
   const copyTranscriptBtn = document.querySelector<HTMLButtonElement>('#copy-transcript-btn');
+  const integrationSummaryEl = document.querySelector<HTMLSpanElement>('#integration-connection-summary');
+  const integrationStatusElements: Record<IntegrationKey, HTMLSpanElement | null> = {
+    googleCalendar: document.querySelector<HTMLSpanElement>('#integration-status-google'),
+    github: document.querySelector<HTMLSpanElement>('#integration-status-github')
+  };
+  const integrationButtons: Record<IntegrationKey, HTMLButtonElement | null> = {
+    googleCalendar: document.querySelector<HTMLButtonElement>('[data-integration="google-calendar"]'),
+    github: document.querySelector<HTMLButtonElement>('[data-integration="github"]')
+  };
+
+  const integrationState: Record<IntegrationKey, IntegrationInfo> = {
+    googleCalendar: {
+      key: 'googleCalendar',
+      service: 'google_calendar',
+      displayName: 'Google Calendar',
+      connected: false,
+      connectedSince: null,
+      lastSynced: null,
+      snapshot: null
+    },
+    github: {
+      key: 'github',
+      service: 'github',
+      displayName: 'GitHub',
+      connected: false,
+      connectedSince: null,
+      lastSynced: null,
+      snapshot: null
+    }
+  };
+
+  async function generateSnapshot(key: IntegrationKey): Promise<IntegrationSnapshot | null> {
+    return key === 'googleCalendar' ? await fetchGoogleCalendarSnapshot() : await fetchGitHubSnapshot();
+  }
+
+  async function ensureSnapshot(key: IntegrationKey): Promise<IntegrationSnapshot | null> {
+    const state = integrationState[key];
+    if (!state.snapshot) {
+      state.snapshot = await generateSnapshot(key);
+    }
+    return state.snapshot;
+  }
+
+  function updateIntegrationUI() {
+    const states = Object.values(integrationState);
+    const connectedCount = states.filter((state) => state.connected).length;
+    if (integrationSummaryEl) {
+      integrationSummaryEl.textContent = connectedCount > 0 ? `${connectedCount}件連携中` : '未連携';
+    }
+
+    states.forEach((state) => {
+      const statusEl = integrationStatusElements[state.key];
+      const buttonEl = integrationButtons[state.key];
+
+      if (statusEl) {
+        if (state.connected) {
+          statusEl.textContent = state.lastSynced ? `連携済み・最終同期 ${formatSyncTimestamp(state.lastSynced)}` : '連携済み';
+          statusEl.dataset.state = 'connected';
+        } else {
+          statusEl.textContent = '未連携';
+          statusEl.dataset.state = 'disconnected';
+        }
+      }
+
+      if (buttonEl && !buttonEl.dataset.loading) {
+        buttonEl.textContent = state.connected ? 'データを再同期' : `${state.displayName}を連携`;
+      }
+      if (buttonEl) {
+        buttonEl.ariaLabel = state.connected ? `${state.displayName}のデータを再同期` : `${state.displayName}を連携`;
+      }
+    });
+  }
+
+  async function connectIntegration(key: IntegrationKey) {
+    const state = integrationState[key];
+
+    // Check if already connected
+    const authStatusResponse = await fetch('http://localhost:3001/api/auth/status', {
+      credentials: 'include'
+    });
+
+    const authStatus = await authStatusResponse.json();
+    const isAuthenticated = key === 'googleCalendar' ? authStatus.google : authStatus.github;
+
+    if (!isAuthenticated) {
+      // Trigger OAuth flow
+      const authEndpoint = key === 'googleCalendar'
+        ? 'http://localhost:3001/api/auth/google'
+        : 'http://localhost:3001/api/auth/github';
+
+      const authResponse = await fetch(authEndpoint, {
+        credentials: 'include'
+      });
+      const { authUrl } = await authResponse.json();
+
+      // Open OAuth popup
+      const popup = window.open(authUrl, 'oauth', 'width=500,height=600');
+
+      // Wait for OAuth callback
+      await new Promise<void>((resolve) => {
+        const messageHandler = (event: MessageEvent) => {
+          if (event.origin !== 'http://localhost:5173') return;
+
+          const expectedType = key === 'googleCalendar' ? 'google-auth-success' : 'github-auth-success';
+          if (event.data.type === expectedType) {
+            window.removeEventListener('message', messageHandler);
+            resolve();
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        // Fallback: check if popup closed without message
+        const checkClosed = setInterval(() => {
+          if (popup?.closed) {
+            clearInterval(checkClosed);
+            window.removeEventListener('message', messageHandler);
+            resolve();
+          }
+        }, 500);
+      });
+    }
+
+    // Sync data
+    const syncEndpoint = key === 'googleCalendar'
+      ? 'http://localhost:3001/api/sync/google-calendar'
+      : 'http://localhost:3001/api/sync/github';
+
+    const syncResponse = await fetch(syncEndpoint, {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (syncResponse.ok) {
+      await syncResponse.json();
+      const syncedAt = new Date();
+
+      if (!state.connected) {
+        state.connected = true;
+        state.connectedSince = syncedAt;
+      }
+      state.lastSynced = syncedAt;
+      state.snapshot = await generateSnapshot(key);
+
+      console.log(`🔗 ${state.displayName} synced at ${syncedAt.toISOString()}`);
+      updateIntegrationUI();
+    } else {
+      console.error(`Failed to sync ${state.displayName}`);
+      throw new Error(`Failed to sync ${state.displayName}`);
+    }
+  }
+
+  async function handleIntegrationClick(key: IntegrationKey) {
+    const button = integrationButtons[key];
+    if (!button) return;
+    const state = integrationState[key];
+    button.disabled = true;
+    button.dataset.loading = 'true';
+    button.textContent = state.connected ? '同期中...' : '連携処理中...';
+
+    try {
+      await connectIntegration(key);
+    } catch (error) {
+      console.error(`Integration error for ${key}:`, error);
+      alert(`${state.displayName}の連携に失敗しました。もう一度お試しください。`);
+    } finally {
+      delete button.dataset.loading;
+      button.disabled = false;
+    }
+  }
+
+  Object.entries(integrationButtons).forEach(([key, button]) => {
+    if (!button) return;
+    button.addEventListener('click', () => handleIntegrationClick(key as IntegrationKey));
+  });
+
+  updateIntegrationUI();
+
+  const fetchWeeklyActivityTool = tool({
+    name: 'fetch_weekly_activity',
+    description: 'Collect aggregated weekly activity from connected Google Calendar and GitHub integrations to support the reflection.',
+    parameters: z.object({
+      timeframe: z
+        .string()
+        .min(2)
+        .describe('Timeframe to inspect (e.g. "last_7_days" or an ISO date range). Defaults to the current week when omitted.')
+        .nullish(),
+      includeServices: z
+        .array(z.enum(['google_calendar', 'github']))
+        .min(1)
+        .describe('Subset of services to include. Defaults to all connected integrations.')
+        .nullish()
+    }).strict(),
+    strict: true,
+    execute: async ({ timeframe, includeServices }) => {
+      const resolvedTimeframe = timeframe ?? getWeekRangeLabel();
+      const requestedServices: IntegrationServiceId[] = includeServices && includeServices.length
+        ? includeServices
+        : (Object.values(SERVICE_ID_BY_KEY) as IntegrationServiceId[]);
+
+      const available = requestedServices
+        .map((service) => {
+          const key = KEY_BY_SERVICE_ID[service];
+          const state = integrationState[key];
+          return state.connected ? { service, state } : null;
+        })
+        .filter((item): item is { service: IntegrationServiceId; state: IntegrationInfo } => item !== null);
+
+      const missing = requestedServices.filter((service) => {
+        const key = KEY_BY_SERVICE_ID[service];
+        return !integrationState[key].connected;
+      });
+
+      if (available.length === 0) {
+        return JSON.stringify({
+          timeframe: resolvedTimeframe,
+          services: [],
+          missing,
+          status: 'no_connected_integrations',
+          message: 'No connected activity sources. Invite the user to link Google Calendar or GitHub from the header integrations panel.'
+        });
+      }
+
+      const services = await Promise.all(
+        available.map(async ({ service, state }) => {
+          const snapshot = await ensureSnapshot(state.key);
+          return {
+            service,
+            displayName: state.displayName,
+            lastSynced: state.lastSynced?.toISOString() ?? null,
+            connectedSince: state.connectedSince?.toISOString() ?? null,
+            snapshot
+          };
+        })
+      );
+
+      return JSON.stringify({
+        timeframe: resolvedTimeframe,
+        generatedAt: new Date().toISOString(),
+        services,
+        missing
+      });
+    }
+  });
+
 
   const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
     opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
@@ -352,6 +700,16 @@ You are a PROFESSIONAL ICF-CERTIFIED COACH facilitating a structured weekly refl
 - If a topic has been discussed, approach it from a completely different angle or move to unexplored areas
 - Build on previous responses rather than asking variations of the same question
 
+# Integrated Activity Sources
+- The user can link Google Calendar and GitHub to surface weekly activity insights.
+- When you want to reference their schedule or engineering work, say "Let me think" and call the 'fetch_weekly_activity' function to gather the freshest context before responding.
+- Parse the JSON payload returned by the tool (timeframe, services[].snapshot) and weave only the most relevant highlights, metrics, and prompts into your coaching.
+- If the tool reports no connected services, invite the user to open the integrations panel and link Google Calendar or GitHub.
+
+# Collaboration Pattern
+- You are the chat-facing agent. For deeper reasoning or whenever you use a tool, explicitly say "Let me think" first so the user experiences the supervisor handoff cue.
+- After receiving tool output, synthesize the insights succinctly, then build forward with powerful questions.
+
 # Personality & Tone
 ## Personality
 Warm, professional, curious, and genuinely interested in the client's development. Embody trust, safety, and presence.
@@ -516,6 +874,7 @@ Use these as inspiration, but adapt to the client's specific sharing:
 4. **Integration phase**: Choose ONE focused direction rather than asking multiple similar "next week" questions
 
 Remember: Your role is to facilitate THEIR reflection and insight, not to provide answers or advice. Trust the client as the expert on their own life and experience. AVOID asking questions that sound like variations of what you've already explored.`,
+        tools: [fetchWeeklyActivityTool]
       });
 
       // Create the session

@@ -12,39 +12,63 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
             <h1 class="brand-title">Weekly Reflection Coaching</h1>
           </div>
         </div>
-        <div id="usage-stats" class="usage-inline" style="display: none;">
-          <div class="usage-inline-header">
-            <span class="usage-inline-title">Usage metrics</span>
-            <span class="usage-inline-duration" id="stat-session-duration">00:00</span>
-          </div>
-          <div class="usage-inline-grid">
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Req</span>
-              <span class="usage-inline-value stat-value" id="stat-requests">0</span>
+        <div class="header-activity-rail">
+          <section class="integration-inline" aria-live="polite">
+            <div class="integration-inline-header">
+              <span class="integration-inline-title">Activity sources</span>
+              <span id="integration-connection-summary" class="integration-inline-summary">未連携</span>
             </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">In</span>
-              <span class="usage-inline-value stat-value" id="stat-input-tokens">0</span>
+            <div class="integration-inline-grid">
+              <div class="integration-inline-item" data-service="google-calendar">
+                <div class="integration-inline-copy">
+                  <span class="integration-inline-label">Google Calendar</span>
+                  <span id="integration-status-google" class="integration-inline-status" data-state="disconnected">未連携</span>
+                </div>
+                <button type="button" class="integration-inline-action" data-integration="google-calendar">Google Calendarを連携</button>
+              </div>
+              <div class="integration-inline-item" data-service="github">
+                <div class="integration-inline-copy">
+                  <span class="integration-inline-label">GitHub</span>
+                  <span id="integration-status-github" class="integration-inline-status" data-state="disconnected">未連携</span>
+                </div>
+                <button type="button" class="integration-inline-action" data-integration="github">GitHubを連携</button>
+              </div>
             </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Out</span>
-              <span class="usage-inline-value stat-value" id="stat-output-tokens">0</span>
+          </section>
+          <div id="usage-stats" class="usage-inline" style="display: none;">
+            <div class="usage-inline-header">
+              <span class="usage-inline-title">Usage metrics</span>
+              <span class="usage-inline-duration" id="stat-session-duration">00:00</span>
             </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Total</span>
-              <span class="usage-inline-value stat-value" id="stat-total-tokens">0</span>
-            </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Cached</span>
-              <span class="usage-inline-value stat-value" id="stat-cached-tokens">0</span>
-            </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Text</span>
-              <span class="usage-inline-value stat-value" id="stat-text-tokens">0</span>
-            </div>
-            <div class="usage-inline-item">
-              <span class="usage-inline-label">Audio</span>
-              <span class="usage-inline-value stat-value" id="stat-audio-tokens">0</span>
+            <div class="usage-inline-grid">
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Req</span>
+                <span class="usage-inline-value stat-value" id="stat-requests">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">In</span>
+                <span class="usage-inline-value stat-value" id="stat-input-tokens">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Out</span>
+                <span class="usage-inline-value stat-value" id="stat-output-tokens">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Total</span>
+                <span class="usage-inline-value stat-value" id="stat-total-tokens">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Cached</span>
+                <span class="usage-inline-value stat-value" id="stat-cached-tokens">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Text</span>
+                <span class="usage-inline-value stat-value" id="stat-text-tokens">0</span>
+              </div>
+              <div class="usage-inline-item">
+                <span class="usage-inline-label">Audio</span>
+                <span class="usage-inline-value stat-value" id="stat-audio-tokens">0</span>
+              </div>
             </div>
           </div>
         </div>
