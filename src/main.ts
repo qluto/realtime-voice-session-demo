@@ -83,7 +83,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <div class="panel-body">
             <div id="instructions" class="instructions-card">
               <h3>🎯 セッションの始め方</h3>
-              <p>「コーチングセッション開始」を押してマイクアクセスを許可すると、ICF認定コーチングアプローチによる週次振り返りがスタートします。</p>
+              <p>「コーチングセッション開始」を押してマイクアクセスを許可すると、AIコーチとの音声チャットがスタートします。</p>
               <div class="instructions-list">
                 <div class="instruction-step">
                   <span class="step-label">オープニング</span>
