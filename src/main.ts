@@ -99,6 +99,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
                 <span aria-hidden="true">📋</span>
                 <span>ログをコピー</span>
               </button>
+              <button id="activity-request-btn" type="button" class="icon-pill" style="display: none;">
+                <span aria-hidden="true">📈</span>
+                <span>アクティビティを確認</span>
+              </button>
               <div id="summary-controls" class="summary-controls" style="display: none;">
                 <button id="request-summary-btn" type="button" class="pill-button">まとめをリクエスト</button>
               </div>

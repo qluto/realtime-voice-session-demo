@@ -43,20 +43,20 @@ function categorizeEvent(event: CalendarEvent): string {
   const text = `${summary} ${description}`;
 
   if (text.match(/focus|deep work|coding|development|writing/)) {
-    return 'Deep Work';
+    return '集中作業';
   } else if (text.match(/mentor|coaching|1:1|one-on-one/)) {
-    return 'Coaching & Mentoring';
+    return 'コーチング・メンタリング';
   } else if (text.match(/meeting|sync|standup|review|demo/)) {
-    return 'Collaboration';
+    return 'コラボレーション';
   } else if (text.match(/personal|break|lunch|exercise|workout/)) {
-    return 'Recharge';
+    return 'リチャージ';
   } else if (event.attendees && event.attendees.length > 2) {
-    return 'Collaboration';
+    return 'コラボレーション';
   } else if (event.attendees && event.attendees.length > 0) {
-    return 'Collaboration';
+    return 'コラボレーション';
   }
 
-  return 'Other';
+  return 'その他';
 }
 
 function calculateDuration(event: CalendarEvent): number {
@@ -71,17 +71,15 @@ function identifyHighlights(events: CalendarEvent[]): Array<{
   title: string;
   insight: string;
   impact?: string;
-  reflectionPrompt: string;
 }> {
   const highlights: Array<{
     title: string;
     insight: string;
     impact?: string;
-    reflectionPrompt: string;
   }> = [];
 
   // Find longest focus block
-  const focusEvents = events.filter(e => categorizeEvent(e) === 'Deep Work');
+  const focusEvents = events.filter(e => categorizeEvent(e) === '集中作業');
   if (focusEvents.length > 0) {
     const longestFocus = focusEvents.reduce((longest, current) =>
       calculateDuration(current) > calculateDuration(longest) ? current : longest
@@ -90,10 +88,9 @@ function identifyHighlights(events: CalendarEvent[]): Array<{
     if (calculateDuration(longestFocus) >= 1) {
       const startTime = new Date(longestFocus.start.dateTime!);
       highlights.push({
-        title: `${longestFocus.summary} (${startTime.toLocaleDateString('en-US', { weekday: 'short' })} ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
-        insight: `Dedicated ${calculateDuration(longestFocus).toFixed(1)} hours to focused work without interruption.`,
-        impact: 'flow',
-        reflectionPrompt: 'What protected that focus block and how can you replicate it?'
+        title: `${longestFocus.summary} (${startTime.toLocaleDateString('ja-JP', { weekday: 'short' })} ${startTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
+        insight: `${calculateDuration(longestFocus).toFixed(1)}時間の集中作業`,
+        impact: 'flow'
       });
     }
   }
@@ -109,23 +106,21 @@ function identifyHighlights(events: CalendarEvent[]): Array<{
     const meeting = importantMeetings[0];
     const startTime = new Date(meeting.start.dateTime!);
     highlights.push({
-      title: `${meeting.summary} (${startTime.toLocaleDateString('en-US', { weekday: 'short' })} ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
-      insight: `Coordinated with ${meeting.attendees?.length || 0} participants on strategic alignment.`,
-      impact: 'energizing',
-      reflectionPrompt: `What from this meeting feels important to carry into next week?`
+      title: `${meeting.summary} (${startTime.toLocaleDateString('ja-JP', { weekday: 'short' })} ${startTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
+      insight: `${meeting.attendees?.length || 0}名参加のミーティング`,
+      impact: 'energizing'
     });
   }
 
   // Find mentoring sessions
-  const mentoringEvents = events.filter(e => categorizeEvent(e) === 'Coaching & Mentoring');
+  const mentoringEvents = events.filter(e => categorizeEvent(e) === 'コーチング・メンタリング');
   if (mentoringEvents.length > 0) {
     const mentoring = mentoringEvents[0];
     const startTime = new Date(mentoring.start.dateTime!);
     highlights.push({
-      title: `${mentoring.summary} (${startTime.toLocaleDateString('en-US', { weekday: 'short' })} ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
-      insight: 'Created space for reflection and growth with a team member.',
-      impact: 'reflective',
-      reflectionPrompt: 'What insights emerged from this conversation that you want to act on?'
+      title: `${mentoring.summary} (${startTime.toLocaleDateString('ja-JP', { weekday: 'short' })} ${startTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })})`,
+      insight: '1on1セッション',
+      impact: 'reflective'
     });
   }
 
@@ -153,24 +148,25 @@ export function transformGoogleCalendarData(data: GoogleCalendarData): Integrati
   });
 
   // Generate summary
-  const totalMeetingHours = (timeByTheme['Collaboration'] || 0) + (timeByTheme['Coaching & Mentoring'] || 0);
-  const focusHours = timeByTheme['Deep Work'] || 0;
-  const summary = focusHours > 5
-    ? `You protected ${focusHours.toFixed(1)} hours for deep work while balancing ${totalMeetingHours.toFixed(1)} hours of meetings.${lateEveningMeetings.length > 0 ? ` ${lateEveningMeetings.length} late-evening session(s) may have impacted energy—consider recovery planning.` : ''}`
-    : `Heavy collaboration week with ${totalMeetingHours.toFixed(1)} hours in meetings. Consider blocking more focus time next week.`;
+  const totalMeetingHours = (timeByTheme['コラボレーション'] || 0) + (timeByTheme['コーチング・メンタリング'] || 0);
+  const focusHours = timeByTheme['集中作業'] || 0;
+  const summary = `集中作業${focusHours.toFixed(1)}時間、ミーティング${totalMeetingHours.toFixed(1)}時間${lateEveningMeetings.length > 0 ? `、19:00以降のミーティング${lateEveningMeetings.length}件` : ''}`;
 
   const highlights = identifyHighlights(events);
 
-  // Energy signals
-  const energySignals: string[] = [];
+  // Patterns observed
+  const patterns: string[] = [];
   if (focusHours > 5) {
-    energySignals.push('Deep work blocks consistently protected—maintain this pattern.');
+    patterns.push(`週${focusHours.toFixed(1)}時間の集中作業時間を確保`);
   }
   if (lateEveningMeetings.length > 0) {
-    energySignals.push(`${lateEveningMeetings.length} late-evening meeting(s)—consider guardrails after 19:00 to preserve energy.`);
+    patterns.push(`19:00以降に${lateEveningMeetings.length}件のミーティング`);
   }
   if (totalMeetingHours > 20) {
-    energySignals.push('Meeting load is high—look for opportunities to decline or delegate.');
+    patterns.push(`週${totalMeetingHours.toFixed(1)}時間のミーティング`);
+  }
+  if (timeByTheme['リチャージ'] && timeByTheme['リチャージ'] > 0) {
+    patterns.push(`個人時間${timeByTheme['リチャージ'].toFixed(1)}時間`);
   }
 
   return {
@@ -178,28 +174,14 @@ export function transformGoogleCalendarData(data: GoogleCalendarData): Integrati
     summary,
     totals: {
       focusHours: focusHours,
-      meetingHours: timeByTheme['Collaboration'] || 0,
-      mentoringHours: timeByTheme['Coaching & Mentoring'] || 0,
-      personalTimeHours: timeByTheme['Recharge'] || 0
+      meetingHours: timeByTheme['コラボレーション'] || 0,
+      mentoringHours: timeByTheme['コーチング・メンタリング'] || 0,
+      personalTimeHours: timeByTheme['リチャージ'] || 0
     },
     highlights,
-    reflectionPrompts: [
-      'Which meeting energized you the most and what made it work?',
-      'Where did meetings or context switching erode your focus?',
-      'What personal time ritual helped you reset heading into the weekend?'
-    ],
-    recommendations: [
-      focusHours < 5 ? 'Block at least 2-hour focus windows early in the day before meetings begin.' : 'Maintain your current focus block discipline.',
-      lateEveningMeetings.length > 0 ? 'Move late meetings earlier or convert to async updates to protect recovery time.' : 'Keep evening boundaries in place.',
-      totalMeetingHours > 15 ? 'Review recurring meetings and identify candidates for reduced frequency.' : 'Meeting balance looks sustainable.'
-    ],
     details: {
       timeByTheme: Object.entries(timeByTheme).map(([theme, hours]) => ({ theme, hours })),
-      energySignals,
-      upcomingPreparation: [
-        'Review next week calendar and block focus time proactively.',
-        'Identify any high-stakes meetings that need preparation.'
-      ]
+      patterns
     },
     generatedAt: generatedAt.toISOString()
   };

@@ -5,7 +5,8 @@ import {
   addConversationEndMarker,
   clearConversationLog,
   showConversationLog,
-  hideConversationLog
+  hideConversationLog,
+  addToolSnapshotToLog
 } from './utils/conversation-logger';
 import {
   startSessionTimer,
@@ -44,10 +45,7 @@ export interface IntegrationSnapshot {
     title: string;
     insight: string;
     impact?: string;
-    reflectionPrompt: string;
   }>;
-  reflectionPrompts: string[];
-  recommendations: string[];
   details: Record<string, unknown>;
   generatedAt: string;
 }
@@ -132,6 +130,33 @@ function formatSyncTimestamp(date: Date | null): string {
   return `${formatDateForLabel(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+function getReadableErrorMessage(error: unknown): string {
+  if (!error) return 'Unknown error occurred';
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object') {
+    const payload = error as Record<string, unknown>;
+    const candidate = payload.error;
+    if (typeof candidate === 'string') return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const message = (candidate as Record<string, unknown>).message;
+      if (typeof message === 'string' && message.trim().length > 0) {
+        return message;
+      }
+      const type = (candidate as Record<string, unknown>).type;
+      if (typeof type === 'string') {
+        return type;
+      }
+    }
+    try {
+      return JSON.stringify(payload);
+    } catch {
+      return 'Unknown error occurred';
+    }
+  }
+  return 'Unknown error occurred';
+}
+
 
 
 
@@ -152,6 +177,7 @@ export function setupVoiceAgent() {
   const continueSessionBtn = document.querySelector<HTMLButtonElement>('#continue-session-btn')
   const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn');
   const copyTranscriptBtn = document.querySelector<HTMLButtonElement>('#copy-transcript-btn');
+  const activityRequestBtn = document.querySelector<HTMLButtonElement>('#activity-request-btn');
   const integrationSummaryEl = document.querySelector<HTMLSpanElement>('#integration-connection-summary');
   const integrationStatusElements: Record<IntegrationKey, HTMLSpanElement | null> = {
     googleCalendar: document.querySelector<HTMLSpanElement>('#integration-status-google'),
@@ -366,13 +392,23 @@ export function setupVoiceAgent() {
       });
 
       if (available.length === 0) {
-        return JSON.stringify({
+        const payload = {
           timeframe: resolvedTimeframe,
           services: [],
           missing,
           status: 'no_connected_integrations',
           message: 'No connected activity sources. Invite the user to link Google Calendar or GitHub from the header integrations panel.'
+        };
+
+        addToolSnapshotToLog({
+          toolName: 'fetch_weekly_activity',
+          timeframe: resolvedTimeframe,
+          generatedAt: new Date().toISOString(),
+          services: [],
+          missing
         });
+
+        return JSON.stringify(payload);
       }
 
       const services = await Promise.all(
@@ -388,12 +424,22 @@ export function setupVoiceAgent() {
         })
       );
 
-      return JSON.stringify({
+      const responsePayload = {
         timeframe: resolvedTimeframe,
         generatedAt: new Date().toISOString(),
         services,
         missing
+      };
+
+      addToolSnapshotToLog({
+        toolName: 'fetch_weekly_activity',
+        timeframe: resolvedTimeframe,
+        generatedAt: responsePayload.generatedAt,
+        services,
+        missing
       });
+
+      return JSON.stringify(responsePayload);
     }
   });
 
@@ -569,6 +615,32 @@ export function setupVoiceAgent() {
         }, 2000);
       } else {
         alert('コピーに失敗しました。ブラウザ設定をご確認ください。');
+      }
+    });
+  }
+
+  if (activityRequestBtn) {
+    activityRequestBtn.addEventListener('click', async () => {
+      if (!session || !isConnected) {
+        alert('セッションが開始されていません。接続後にお試しください。');
+        return;
+      }
+
+      const requestText = '連携済みのサービスのアクティビティを確認したいです。最新のハイライトを教えてください。';
+
+      try {
+        addMessageToLog('user', requestText);
+        await session.sendMessage({
+          type: 'message',
+          role: 'user',
+          content: [{
+            type: 'input_text',
+            text: requestText
+          }]
+        });
+      } catch (error) {
+        console.error('Failed to request activity review:', error);
+        alert('アクティビティの確認リクエストに失敗しました。もう一度お試しください。');
       }
     });
   }
@@ -1031,7 +1103,8 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
 
       session.on('error', (error) => {
         console.error('Session error:', error);
-        alert(`Error: ${error.error || 'Unknown error occurred'}`);
+        const message = getReadableErrorMessage(error);
+        alert(`Error: ${message}`);
         stopUsageTracking(session);
         stopSessionTimer();
         stopSpeakingAnimation();

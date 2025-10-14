@@ -95,13 +95,11 @@ function identifyHighlights(events: GitHubEvent[], stats: ReturnType<typeof anal
   title: string;
   insight: string;
   impact?: string;
-  reflectionPrompt: string;
 }> {
   const highlights: Array<{
     title: string;
     insight: string;
     impact?: string;
-    reflectionPrompt: string;
   }> = [];
 
   // Find the most active repo
@@ -113,10 +111,9 @@ function identifyHighlights(events: GitHubEvent[], stats: ReturnType<typeof anal
     const shortName = repoName.split('/').pop() || repoName;
 
     highlights.push({
-      title: `Primary focus: ${shortName}`,
-      insight: `Shipped ${repoStats.commits} commit(s) and ${repoStats.prs} PR(s), establishing clear momentum.`,
-      impact: 'shipped',
-      reflectionPrompt: 'What helped you deliver progress on this project, and how can you reuse that approach?'
+      title: `主な活動: ${shortName}`,
+      insight: `${repoStats.commits}件のコミットと${repoStats.prs}件のPR`,
+      impact: 'shipped'
     });
   }
 
@@ -128,19 +125,17 @@ function identifyHighlights(events: GitHubEvent[], stats: ReturnType<typeof anal
 
     highlights.push({
       title: title.length > 60 ? title.substring(0, 57) + '...' : title,
-      insight: 'Proposed changes that advance project goals.',
-      impact: 'quality',
-      reflectionPrompt: 'What quality standards did you maintain, and what support would help you sustain them?'
+      insight: 'プルリクエストを作成',
+      impact: 'quality'
     });
   }
 
   // Find review activity
   if (stats.reviews > 0) {
     highlights.push({
-      title: `Code reviews contributed`,
-      insight: `Reviewed ${stats.reviews} PR(s), supporting team velocity and code quality.`,
-      impact: 'collaboration',
-      reflectionPrompt: 'Where do you want to keep showing up in code reviews next week?'
+      title: `コードレビュー活動`,
+      insight: `${stats.reviews}件のPRをレビュー`,
+      impact: 'collaboration'
     });
   }
 
@@ -161,7 +156,7 @@ function generateRepositoryDetails(stats: ReturnType<typeof analyzeEvents>, repo
       commits: repoStats.commits,
       pullRequests: repoStats.prs,
       reviews: repoStats.reviews,
-      focus: `${repo?.language || 'Development'} work with ${repoStats.commits} commit(s).`
+      focus: `${repo?.language || '開発'}作業で${repoStats.commits}件のコミット。`
     };
   });
 }
@@ -182,8 +177,8 @@ export function transformGitHubData(data: GitHubData): IntegrationSnapshot {
     : `${Math.round(((stats.commits - avgCommitsPerWeek) / avgCommitsPerWeek) * 100)}%`;
 
   const summary = stats.commits > 0
-    ? `You shipped ${stats.commits} commit(s) across ${stats.byRepo.size} ${stats.byRepo.size === 1 ? 'repository' : 'repositories'}${stats.pullRequests > 0 ? ` with ${stats.pullRequests} PR(s)` : ''}.${stats.reviews > 0 ? ` Code reviews stayed consistent with ${stats.reviews} contribution(s).` : ''}`
-    : 'Limited development activity this week. Consider whether this aligns with your current priorities.';
+    ? `${stats.byRepo.size}個のリポジトリで${stats.commits}件のコミット${stats.pullRequests > 0 ? `、${stats.pullRequests}件のPR` : ''}${stats.reviews > 0 ? `、${stats.reviews}件のレビュー` : ''}`
+    : '開発アクティビティなし';
 
   return {
     timeframe,
@@ -195,23 +190,12 @@ export function transformGitHubData(data: GitHubData): IntegrationSnapshot {
       issuesClosed: stats.issuesClosed
     },
     highlights,
-    reflectionPrompts: [
-      'Which commit or pull request are you most proud of and why?',
-      'Where did you notice friction in the workflow that you want to remove?',
-      'How did collaboration show up in code reviews, and what do you want to continue or change?'
-    ],
-    recommendations: [
-      stats.commits > 20 ? 'High commit velocity—ensure documentation keeps pace with code changes.' : 'Consider blocking dedicated coding time to increase development momentum.',
-      stats.reviews === 0 ? 'No reviews recorded—look for opportunities to support teammates through code review.' : 'Maintain consistent review participation to support team quality.',
-      stats.pullRequests > 3 ? 'Multiple PRs opened—consider pairing to get faster feedback and reduce WIP.' : 'Keep shipping incremental changes through focused PRs.'
-    ],
     details: {
       repositories: repositoryDetails,
       velocityComparison: {
         lastWeekCommits: avgCommitsPerWeek,
         delta
-      },
-      blockers: repositoryDetails.length === 0 ? ['No development activity detected—verify integration or discuss priorities.'] : []
+      }
     },
     generatedAt: generatedAt.toISOString()
   };

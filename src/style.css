@@ -782,6 +782,13 @@ button {
   margin-right: auto;
 }
 
+.message.tool {
+  margin-right: auto;
+  border-left: 4px solid rgba(47, 65, 255, 0.4);
+  background: rgba(47, 65, 255, 0.08);
+  max-width: 95%;
+}
+
 .message.user {
   margin-left: auto;
   background: linear-gradient(135deg, #2f41ff 0%, #6173ff 100%);
@@ -817,6 +824,155 @@ button {
 
 .message.assistant .message-content {
   color: var(--text-strong);
+}
+
+.tool-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tool-call-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-strong);
+}
+
+.tool-call-meta {
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.tool-service {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(47, 65, 255, 0.15);
+}
+
+.tool-service:first-of-type {
+  padding-top: 0.5rem;
+  border-top: none;
+}
+
+.tool-service-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.tool-service-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.tool-service-sync {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.tool-service-empty {
+  font-size: 0.9rem;
+  color: var(--text-subtle);
+}
+
+.tool-service-summary {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-strong);
+}
+
+.tool-metric-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.tool-metric {
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(47, 65, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tool-metric-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+}
+
+.tool-metric-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.tool-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tool-section-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-subtle);
+}
+
+.tool-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tool-list-item {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-strong);
+}
+
+.tool-list-item::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #2f41ff;
+}
+
+.tool-highlight-title {
+  display: block;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.tool-highlight-detail {
+  display: block;
+}
+
+.tool-highlight-prompt {
+  display: block;
+  color: var(--text-subtle);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+
+.tool-missing-note {
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(255, 183, 77, 0.2);
+  color: #9a5300;
+  font-size: 0.85rem;
 }
 
 .message.speaking {
