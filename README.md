@@ -45,6 +45,40 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
 
 4. **Open your browser** and navigate to http://localhost:5173
 
+### Optional configuration
+
+- `VITE_TOKEN_ENDPOINT` — Override the token broker URL (defaults to `/api/generate-token`)
+- `OPENAI_REALTIME_MODEL` — Override the realtime model requested from OpenAI (defaults to `gpt-realtime`)
+
+## Deploying to Vercel
+
+1. **Install and authenticate the Vercel CLI**
+   ```bash
+   npm install -g vercel
+   vercel login
+   ```
+2. **Link the repository to a new Vercel project**
+   ```bash
+   vercel link
+   ```
+3. **Configure production environment variables**
+   ```bash
+   vercel env add OPENAI_API_KEY production
+   # Optional overrides
+   vercel env add OPENAI_API_KEY preview
+   vercel env add OPENAI_API_KEY development
+   vercel env add OPENAI_REALTIME_MODEL production
+   ```
+   The frontend automatically calls the serverless function at `/api/generate-token`, so no public token ever reaches the browser.
+4. **Deploy**
+   ```bash
+   vercel --prod
+   ```
+5. **Verify**
+   - Visit the deployment URL shown after the CLI finishes
+   - Confirm the UI loads and "Connect" starts a session without console errors
+   - Optionally assign a custom domain via the Vercel dashboard
+
 ## How to Use Your Coaching Session
 
 1. **Prepare Your Space**: Find a quiet, private space where you can speak freely
