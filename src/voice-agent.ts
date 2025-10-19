@@ -29,6 +29,8 @@ let session: RealtimeSession | null = null;
 let isConnected = false;
 let sessionAnalyzer: SessionAnalyzer | null = null;
 
+const tokenEndpoint = import.meta.env.VITE_TOKEN_ENDPOINT || '/api/generate-token';
+
 
 
 
@@ -304,7 +306,7 @@ export function setupVoiceAgent() {
     statusElement.textContent = 'トークン生成中...';
 
     try {
-      const response = await fetch('http://localhost:3001/api/generate-token', {
+      const response = await fetch(tokenEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
