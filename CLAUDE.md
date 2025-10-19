@@ -27,9 +27,10 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - `src/voice-agent.ts` - Core voice interaction logic using @openai/agents
 - `src/style.css` - Complete styling with dark/light mode support
 
-**Backend (Express):**
-- `server.js` - Token generation server for OpenAI ephemeral tokens
-- `vite.config.ts` - Development proxy configuration (contains duplicate token generation logic)
+**Backend:**
+- `server.js` - Express token generation server for local development (port 3001)
+- `api/generate-token.ts` - Vercel serverless function for production deployment
+- `vite.config.ts` - Development proxy configuration (proxies /api to localhost:3001)
 
 ### Key Architecture Patterns
 
@@ -58,7 +59,8 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 **Token Generation:**
 - Ephemeral tokens generated via `/api/generate-token` endpoint
 - Tokens start with "ek_" and are temporary/secure
-- Dual implementation: Express server + Vite proxy (development convenience)
+- Local development: Express server (server.js) on port 3001
+- Production (Vercel): Serverless function (api/generate-token.ts)
 
 **Usage Analytics:**
 - Real-time token consumption tracking (input/output/cached/audio/text)
@@ -73,9 +75,16 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 
 ### Development Workflow
 
-1. Set up `.env` with valid OpenAI API key
-2. Run `npm run dev:full` to start both servers
-3. Frontend automatically proxies API calls to backend
+**Local Development:**
+1. Set up `.env` file with `OPENAI_API_KEY=sk-proj-...`
+2. Run `npm run dev:full` to start both servers (Express on port 3001 + Vite on port 5173)
+3. Frontend automatically proxies `/api` requests to Express server
 4. All voice interactions happen through ephemeral tokens (never expose main API key to client)
+
+**Vercel Deployment:**
+1. Set `OPENAI_API_KEY` environment variable in Vercel project settings
+2. Deploy via `vercel` command or Git integration
+3. `api/generate-token.ts` automatically becomes a serverless function
+4. Frontend is served as static files from `dist` directory
 
 The application requires microphone permissions and modern browser support for WebRTC functionality.
