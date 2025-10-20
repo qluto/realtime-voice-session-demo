@@ -14,7 +14,7 @@ The realtime coach UI lives in `src/`. `main.ts` wires DOM state into the page, 
 Write TypeScript modules using ES imports with explicit `.ts` extensions. Follow the repository’s two-space indentation and no-semicolon formatting. Prefer descriptive camelCase for variables and functions, PascalCase for exported types, and kebab-case for DOM ids/classes to match `src/style.css`. Keep utility filenames aligned with existing patterns (`conversation-logger.ts`, etc.), and resolve unused symbol warnings rather than suppressing them.
 
 ## Testing Guidelines
-Automated tests are not configured. After changes, run `npm run dev:full`, open the UI, and confirm the conversation log, usage dashboard, and session timer update as expected. When modifying cost calculations, inspect console usage dumps for regressions. If you add tests, colocate them as `*.test.ts` beside their source and document the new command in this guide.
+Automated tests are not configured. After changes, run `npm run dev:full`, open the UI, and confirm the conversation log and session timer update as expected. When modifying cost calculations, inspect console usage dumps for regressions. If you add tests, colocate them as `*.test.ts` beside their source and document the new command in this guide.
 
 ## Commit & Pull Request Guidelines
 Use concise, imperative commit messages mirroring existing history (example: `Add session timer HUD`). For PRs, include a summary of behavior changes, link related issues, list manual verification steps, and attach screenshots or console output for UI updates.

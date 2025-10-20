@@ -10,7 +10,7 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
 - 🔍 **Powerful Coaching Questions**: Research-based questions for deep reflection
 - 🌐 **Browser-based Experience**: No downloads required, works in modern browsers
 - 🔒 **Secure & Private**: Ephemeral token authentication, no data storage
-- 📊 **Usage Analytics**: Real-time token consumption and cost tracking
+- 📊 **Usage Analytics**: Console-based token and cost logging
 - 💰 **Cost Optimization**: Cached input monitoring and savings analysis
 - 🎯 **Professional Structure**: Opening → Reflection → Insights → Integration → Closing
 
@@ -114,14 +114,13 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
 
 **Note:** Your coach follows ICF Core Competencies, focusing on YOUR wisdom and insights rather than giving advice.
 
-## Usage Tracking Features
+## Usage Tracking
 
-The application provides comprehensive usage tracking:
+Usage statistics are logged to the browser console every 10 seconds during an active session:
 
-- **Real-time Statistics**: View live token consumption during conversation
-- **Cached Input Monitoring**: Track when OpenAI uses cached inputs (highlighted in green)
-- **Console Logging**: Detailed usage statistics logged every 10 seconds
-- **UI Dashboard**: Visual display of requests, input/output/total tokens, and cached tokens
+- **Detailed Metrics**: Requests, input/output/total tokens, and cost breakdowns at a glance
+- **Cached Input Monitoring**: Cached token usage highlighted directly in the console output
+- **Token Breakdown**: Separate text vs audio token counts for deeper insight
 
 ### Console Output Example
 ```

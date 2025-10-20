@@ -63,10 +63,9 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - Production (Vercel): Serverless function (api/generate-token.ts)
 
 **Usage Analytics:**
-- Real-time token consumption tracking (input/output/cached/audio/text)
+- Real-time token consumption tracking (input/output/cached/audio/text) via console logs
 - Cost breakdown with multiple pricing model support
 - Console logging every 10 seconds during active sessions
-- Visual dashboard showing savings from cached inputs
 
 **TypeScript Configuration:**
 - Strict mode enabled with comprehensive linting rules

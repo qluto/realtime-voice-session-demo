@@ -22,14 +22,380 @@ import {
   startSpeakingAnimation,
   stopSpeakingAnimation
 } from './utils/speaking-animation';
-import { SessionAnalyzer } from './session-analyzer';
-import type { PhaseKey } from './session-analyzer';
+import { SessionAnalyzer, type CoachingAnalysis, type ModeKey } from './session-analyzer';
+import {
+  getPersonalityPreset,
+  getSessionPurposePreset,
+  defaultPersonalityId,
+  defaultPurposeId,
+  personalityPresets,
+  type PersonalityPreset,
+  type SessionPurposePreset,
+  coachingModeGuides,
+  coachingModeOrder,
+  type CoachingMode
+} from './utils/prompt-presets.ts';
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
 let sessionAnalyzer: SessionAnalyzer | null = null;
 
 const tokenEndpoint = import.meta.env.VITE_TOKEN_ENDPOINT || '/api/generate-token';
+
+const STORAGE_KEYS = {
+  questionnaire: 'voiceCoach.questionnaire',
+  purpose: 'voiceCoach.purpose',
+  sidebarHidden: 'voiceCoach.sidebarHidden'
+} as const;
+
+const coachFoundations = `# ICF Core Competencies Integration
+## Foundation (A)
+- DEMONSTRATE ETHICAL PRACTICE: Maintain complete confidentiality and respect for the client's autonomy
+- EMBODY COACHING MINDSET: Stay curious, flexible, and client-centred throughout the session
+
+## Co-Creating Relationship (B)
+- ESTABLISH AGREEMENTS: Confirm scope, desired outcomes, and the client's ownership of the agenda
+- CULTIVATE TRUST AND SAFETY: Create space for honest sharing about challenges and successes
+- MAINTAIN PRESENCE: Stay fully focused and responsive to the client's words and emotions
+
+## Communicating Effectively (C)
+- LISTEN ACTIVELY: Pay attention to what's said and unsaid, reflecting back key themes
+- EVOKE AWARENESS: Use powerful questions to help the client discover insights that matter to them
+
+## Cultivating Learning & Growth (D)
+- FACILITATE CLIENT GROWTH: Support translating insight into intentional forward motion
+
+# Language Guidelines
+## Language Matching
+Respond in the same language as the client unless they indicate otherwise.
+
+## Unclear Audio Handling
+- Only respond to clear audio input
+- If audio is unclear, say: "I want to make sure I'm fully present with you - could you repeat that?"
+- If there's background noise: "There seems to be some background sound - can you say that again?"
+
+# Safety & Escalation
+- If the client shares significant emotional distress or mental health concerns, respond with empathy and suggest they consider professional support
+- Stay within coaching scope—avoid therapy, advice-giving, or problem-solving
+- If conversation veers into areas requiring expertise beyond coaching, gently redirect toward reflection
+
+# Key Coaching Behaviors
+- ASK rather than tell
+- REFLECT what you hear without adding interpretation
+- CREATE SPACE for silence and processing
+- FOLLOW the client's agenda and interests
+- TRUST the client's wisdom and capability
+- NOTICE patterns, themes, and energy shifts
+- STAY CURIOUS about the client's experience
+
+# Anti-Repetition Guidelines
+1. **Before each question**: Scan recent conversation for similar themes or questions
+2. **If a topic was discussed**: Either go deeper into an unexplored aspect or move to a completely different area
+3. **When in doubt**: Ask about something that builds on their last response rather than starting fresh
+4. **Integration phase**: Choose ONE focused direction rather than asking multiple similar "next" questions
+
+Remember: Your role is to facilitate THEIR reflection and insight, not to provide answers or advice. AVOID asking questions that sound like variations of what has already been explored.`;
+
+type DynamicPromptContext = {
+  mode?: CoachingMode
+  summary?: string
+  rationale?: string
+  coachFocus?: string
+  questions?: string[]
+  confidence?: Partial<Record<CoachingMode, number>>
+}
+
+function renderModeSection(mode: CoachingMode, purpose: SessionPurposePreset): string {
+  const guide = coachingModeGuides[mode];
+  const questionLines = guide.questionSeeds.map((item) => `- ${item}`).join('\n');
+  const moveLines = guide.coachingMoves.map((item) => `- ${item}`).join('\n');
+  const watchLines = guide.watchOuts.map((item) => `- ${item}`).join('\n');
+  const purposeNote = purpose.modeBiases[mode]
+    ? `Purpose nuance: ${purpose.modeBiases[mode]}`
+    : 'Purpose nuance: Use responsively based on client signals.';
+
+  return `## ${guide.label}
+${guide.description}
+Intention: ${guide.intention}
+${purposeNote}
+
+Question seeds to keep fresh:
+${questionLines}
+
+High-leverage moves:
+${moveLines}
+
+Watch-outs:
+${watchLines}`;
+}
+
+function formatConfidenceSnapshot(confidence?: Partial<Record<CoachingMode, number>>): string {
+  if (!confidence) return 'Live confidence pending — stay observant and choose the most resonant mode.';
+  const parts = coachingModeOrder.map((mode) => {
+    const value = Math.max(0, Math.min(1, confidence[mode] ?? 0));
+    const percent = Math.round(value * 100);
+    return `${coachingModeGuides[mode].label}: ${percent}%`;
+  });
+  return parts.join(', ');
+}
+
+function buildLiveCompassSection(purpose: SessionPurposePreset, dynamic?: DynamicPromptContext): string {
+  if (!dynamic || !dynamic.mode) {
+    const defaultMode = purpose.defaultMode;
+    const guide = coachingModeGuides[defaultMode];
+    const bias = purpose.modeBiases[defaultMode] ?? guide.intention;
+    const fallbackQuestions = guide.questionSeeds.slice(0, 2).map((item) => `- ${item}`).join('\n');
+    return `# Live Conversation Compass
+Current guidance: Begin with ${guide.label} mode to honour what matters now.
+Why: ${bias}
+Confidence snapshot: ${formatConfidenceSnapshot()}
+Ask 1-2 of these to open space:
+${fallbackQuestions}
+Flow into other modes as soon as client signals clarity or new needs.`;
+  }
+
+  const guide = coachingModeGuides[dynamic.mode];
+  const lines: string[] = [`Current mode: ${guide.label}`];
+  if (dynamic.summary) lines.push(`Mini-summary: ${dynamic.summary}`);
+  if (dynamic.rationale) lines.push(`Why now: ${dynamic.rationale}`);
+  if (dynamic.coachFocus) lines.push(`Next focus: ${dynamic.coachFocus}`);
+  lines.push(`Confidence snapshot: ${formatConfidenceSnapshot(dynamic.confidence)}`);
+
+  const questionList = (dynamic.questions && dynamic.questions.length > 0
+    ? dynamic.questions
+    : guide.questionSeeds.slice(0, 2)
+  ).map((item) => `- ${item}`).join('\n');
+
+  lines.push('Ask 1-2 of these questions next:');
+  lines.push(questionList);
+  lines.push('Stay agile—pivot to another mode when the client indicates a new need or readiness.');
+
+  return `# Live Conversation Compass
+${lines.join('\n')}`;
+}
+
+function buildAgentInstructions(
+  personality: PersonalityPreset,
+  purpose: SessionPurposePreset,
+  preferenceDirectives: string[] = [],
+  dynamicContext?: DynamicPromptContext
+): string {
+  const emphasisLines = purpose.emphasis.map((item) => `- ${item}`).join('\n');
+  const modeSections = coachingModeOrder.map((mode) => renderModeSection(mode, purpose)).join('\n\n');
+
+  const sections = [
+    `# Role & Objective
+${purpose.roleStatement}`,
+    `# Personality & Tone
+## Personality
+${personality.personality}
+
+## Tone
+${personality.tone}
+
+## Length
+${personality.length}
+
+## Pacing
+${personality.pacing}
+
+## Response Focus
+${personality.responseFocus}`,
+    `# Session Purpose Highlights — ${purpose.label}
+${purpose.focusStatement}
+
+${emphasisLines}`,
+    `# Coaching Mode Compass
+${modeSections}`,
+    buildLiveCompassSection(purpose, dynamicContext)
+  ];
+
+  if (preferenceDirectives.length > 0) {
+    sections.push(`# Session Personalization Cues
+${preferenceDirectives.map((directive) => `- ${directive}`).join('\n')}`);
+  }
+
+  sections.push(coachFoundations);
+
+  return sections.join('\n\n');
+}
+
+type PersonalityId = PersonalityPreset['id'];
+type QuestionnaireQuestionId = 'pace' | 'support' | 'emotion';
+
+const questionnaireQuestionIds: QuestionnaireQuestionId[] = ['pace', 'support', 'emotion'];
+
+const personalityScoreBaseline: Record<PersonalityId, number> = {
+  'warm-professional': 1.5,
+  'direct-challenger': 0.8,
+  'mindful-reflective': 1.5
+};
+
+const personalityQuestionScores: Record<QuestionnaireQuestionId, Record<string, Partial<Record<PersonalityId, number>>>> = {
+  pace: {
+    steady: {
+      'warm-professional': 2,
+      'mindful-reflective': 2
+    },
+    dynamic: {
+      'direct-challenger': 3,
+      'warm-professional': 1
+    },
+    spacious: {
+      'mindful-reflective': 3,
+      'warm-professional': 1
+    }
+  },
+  support: {
+    affirming: {
+      'warm-professional': 3,
+      'mindful-reflective': 1
+    },
+    challenging: {
+      'direct-challenger': 3,
+      'warm-professional': 1
+    },
+    reflective: {
+      'mindful-reflective': 3,
+      'warm-professional': 2
+    }
+  },
+  emotion: {
+    warm: {
+      'warm-professional': 3,
+      'mindful-reflective': 1
+    },
+    balanced: {
+      'direct-challenger': 2,
+      'warm-professional': 2
+    },
+    gentle: {
+      'mindful-reflective': 3,
+      'warm-professional': 1
+    }
+  }
+};
+
+const personalityQuestionRationales: Record<QuestionnaireQuestionId, Record<string, string>> = {
+  pace: {
+    steady: '落ち着いたテンポを望んだため、安心感のあるスタイルを優先しました。',
+    dynamic: 'テンポ良く進めたいニーズから、チャレンジングで推進力のあるスタイルを重視しました。',
+    spacious: '余白を大切にしたい選択から、マインドフルに寄り添うスタイルを強調しました。'
+  },
+  support: {
+    affirming: '励ましと受容を求める回答により、温かくプロフェッショナルな支援を推奨しています。',
+    challenging: '率直さと挑戦を求める回答から、ストレッチをかけるスタイルが合いやすいと判断しました。',
+    reflective: '静かな内省を支えてほしい回答に基づき、丁寧に問いかけるスタイルを選びました。'
+  },
+  emotion: {
+    warm: '感情を適度に共有してほしい回答により、温かい関わりを重視しています。',
+    balanced: '感情表現は控えめが良いとの回答から、クールで明晰なスタイルを選択しました。',
+    gentle: '穏やかな共感を求める回答のため、マインドフルな落ち着きに比重を置きました。'
+  }
+};
+
+const preferenceDirectiveTexts: Record<QuestionnaireQuestionId, Record<string, string>> = {
+  pace: {
+    steady: 'Keep the coaching tempo steady and grounded, leaving reflective pauses for the client.',
+    dynamic: 'Maintain an upbeat, forward-moving cadence that keeps momentum while staying attentive.',
+    spacious: 'Offer a gently paced cadence with generous silence so the client can process internally.'
+  },
+  support: {
+    affirming: 'Lead with affirming reflections before inviting new perspectives or questions.',
+    challenging: 'Provide candid, future-facing challenges that stretch thinking while honouring agency.',
+    reflective: 'Mirror language softly and use open questions that deepen inner reflection.'
+  },
+  emotion: {
+    warm: 'Express calibrated warmth and emotional resonance when acknowledging the client\'s experiences.',
+    balanced: 'Keep emotional expression measured and composed, focusing on clarity and structure.',
+    gentle: 'Offer soothing empathy and name shifts in tone or sensations with a soft presence.'
+  }
+};
+
+const preferenceSummaryTexts: Record<QuestionnaireQuestionId, Record<string, string>> = {
+  pace: {
+    steady: '落ち着いたテンポで進めたい',
+    dynamic: 'テンポよく前進したい',
+    spacious: '余白を重視したい'
+  },
+  support: {
+    affirming: '励ましと受容を重視',
+    challenging: 'ストレッチと挑戦を歓迎',
+    reflective: '静かな内省サポートを希望'
+  },
+  emotion: {
+    warm: '適度な感情共有が安心',
+    balanced: '感情表現は控えめが良い',
+    gentle: '柔らかな共感を求める'
+  }
+};
+
+type QuestionnaireResponses = Partial<Record<QuestionnaireQuestionId, string>>;
+
+type PersonalityRecommendation = {
+  personalityId: PersonalityId;
+  rationale: string[];
+  preferenceDirectives: string[];
+  preferenceSummaries: string[];
+};
+
+function computePersonalityRecommendation(responses: QuestionnaireResponses): PersonalityRecommendation {
+  const aggregateScores: Record<PersonalityId, number> = {} as Record<PersonalityId, number>;
+
+  personalityPresets.forEach((preset) => {
+    aggregateScores[preset.id] = personalityScoreBaseline[preset.id] ?? 0;
+  });
+
+  const rationale: string[] = [];
+  const preferenceDirectives: string[] = [];
+  const preferenceSummaries: string[] = [];
+
+  questionnaireQuestionIds.forEach((questionId) => {
+    const responseValue = responses[questionId];
+    if (!responseValue) {
+      return;
+    }
+    const scoreMap = personalityQuestionScores[questionId]?.[responseValue];
+    if (scoreMap) {
+      Object.entries(scoreMap).forEach(([personalityId, score]) => {
+        const id = personalityId as PersonalityId;
+        aggregateScores[id] += score ?? 0;
+      });
+    }
+    const rationaleText = personalityQuestionRationales[questionId]?.[responseValue];
+    if (rationaleText) {
+      rationale.push(rationaleText);
+    }
+    const directive = preferenceDirectiveTexts[questionId]?.[responseValue];
+    if (directive) {
+      preferenceDirectives.push(directive);
+    }
+    const summary = preferenceSummaryTexts[questionId]?.[responseValue];
+    if (summary) {
+      preferenceSummaries.push(summary);
+    }
+  });
+
+  let bestPersonalityId: PersonalityId = defaultPersonalityId;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  personalityPresets.forEach((preset) => {
+    const score = aggregateScores[preset.id];
+    if (score > bestScore) {
+      bestScore = score;
+      bestPersonalityId = preset.id;
+    } else if (score === bestScore && preset.id === defaultPersonalityId) {
+      bestPersonalityId = preset.id;
+    }
+  });
+
+  return {
+    personalityId: bestPersonalityId,
+    rationale,
+    preferenceDirectives,
+    preferenceSummaries
+  };
+}
 
 
 
@@ -41,8 +407,19 @@ export function setupVoiceAgent() {
   const newSessionBtn = document.querySelector<HTMLButtonElement>('#new-session-btn')!;
   const statusElement = document.querySelector<HTMLSpanElement>('#status')!;
   const statusIndicator = document.querySelector('.status-indicator')!
+  const purposeSelect = document.querySelector<HTMLSelectElement>('#purpose-select')
+  const purposeDescriptionEl = document.querySelector<HTMLElement>('#purpose-description')
+  const coachCalibratorForm = document.querySelector<HTMLFormElement>('#coach-calibrator')
+  const coachRecommendationLabel = document.querySelector<HTMLElement>('#coach-recommendation-label')
+  const coachRecommendationDescription = document.querySelector<HTMLElement>('#coach-recommendation-description')
+  const coachRecommendationRationale = document.querySelector<HTMLElement>('#coach-recommendation-rationale')
+  const configSidebar = document.querySelector<HTMLElement>('#config-sidebar')
+  const configSidebarSurface = document.querySelector<HTMLElement>('#config-sidebar-surface')
+  const configSidebarBackdrop = document.querySelector<HTMLElement>('#config-sidebar-backdrop')
+  const configOpenBtn = document.querySelector<HTMLButtonElement>('#config-open-btn')
+  const configCloseBtn = document.querySelector<HTMLButtonElement>('#config-close-btn')
   const progressPanel = document.querySelector<HTMLElement>('#progress-panel')
-  const currentPhaseEl = document.querySelector<HTMLElement>('#current-phase')
+  const currentModeEl = document.querySelector<HTMLElement>('#current-mode')
   const progressNotesEl = document.querySelector<HTMLElement>('#progress-notes')
   const closureSuggestionEl = document.querySelector<HTMLElement>('#closure-suggestion')
   const closureMessageEl = document.querySelector<HTMLElement>('#closure-message')
@@ -51,21 +428,555 @@ export function setupVoiceAgent() {
   const continueSessionBtn = document.querySelector<HTMLButtonElement>('#continue-session-btn')
   const requestSummaryBtn = document.querySelector<HTMLButtonElement>('#request-summary-btn');
   const copyTranscriptBtn = document.querySelector<HTMLButtonElement>('#copy-transcript-btn');
+  const modalityToggle = document.querySelector<HTMLElement>('#modality-toggle');
+  const modalityButtons = modalityToggle
+    ? Array.from(modalityToggle.querySelectorAll<HTMLButtonElement>('.modality-option'))
+    : [];
+  const textChatForm = document.querySelector<HTMLFormElement>('#text-chat-form');
+  const textChatInput = document.querySelector<HTMLTextAreaElement>('#text-chat-input');
+  const textChatSubmit = document.querySelector<HTMLButtonElement>('#text-chat-submit');
+  const textChatHint = document.querySelector<HTMLElement>('#text-chat-hint');
+  let isTextChatComposing = false;
 
-  const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
-    opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
-    reflection: document.querySelector<HTMLElement>('[data-phase-fill="reflection"]'),
-    insight: document.querySelector<HTMLElement>('[data-phase-fill="insight"]'),
-    integration: document.querySelector<HTMLElement>('[data-phase-fill="integration"]'),
-    closing: document.querySelector<HTMLElement>('[data-phase-fill="closing"]')
+  const coachCalibratorInputs = coachCalibratorForm
+    ? Array.from(coachCalibratorForm.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+    : [];
+  const coachOptionLabels = coachCalibratorForm
+    ? Array.from(coachCalibratorForm.querySelectorAll<HTMLLabelElement>('.coach-option'))
+    : [];
+
+  const defaultRecommendationMessage = '回答すると、もっとも相性の良いコーチスタイルをご案内します。';
+  let activePersonalityId: PersonalityId = defaultPersonalityId;
+  let questionnaireIsComplete = false;
+  let lastPreferenceDirectives: string[] = [];
+  let currentPersonalityPreset = getPersonalityPreset(activePersonalityId);
+  let currentPurposePreset = getSessionPurposePreset(defaultPurposeId);
+  let lastInstructionsSent: string | null = null;
+  let lastDynamicContext: DynamicPromptContext | null = null;
+  let lastOutputModalities: ('audio' | 'text')[] | null = null;
+
+  type Modality = 'voice' | 'text';
+  let currentModality: Modality = 'voice';
+  const suppressedPurposeSet = new Set(['coaching-analysis', 'closure-readiness']);
+  const suppressedResponseIds = new Set<string>();
+  const suppressedItemIds = new Set<string>();
+  const pendingLocalUserMessages: string[] = [];
+
+  const normalizeForDedup = (value: string) => value.trim().replace(/\s+/g, ' ');
+
+  const recordLocalUserMessage = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    pendingLocalUserMessages.push(normalizeForDedup(trimmed));
+    return addMessageToLog('user', trimmed);
+  };
+
+  const computeInstructions = (dynamic?: DynamicPromptContext) =>
+    buildAgentInstructions(currentPersonalityPreset, currentPurposePreset, lastPreferenceDirectives, dynamic);
+
+  const getDesiredOutputModalities = (): ('audio' | 'text')[] =>
+    currentModality === 'text' ? ['text'] : ['audio', 'text'];
+
+  const modalitiesAreEqual = (
+    previous: ('audio' | 'text')[] | null,
+    next: ('audio' | 'text')[]
+  ) => {
+    if (!previous) return false;
+    if (previous.length !== next.length) return false;
+    for (let index = 0; index < next.length; index += 1) {
+      if (previous[index] !== next[index]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const updateTextSubmitState = () => {
+    if (!textChatSubmit) return;
+    const trimmed = textChatInput?.value.trim() ?? '';
+    const enable = currentModality === 'text' && isConnected;
+    textChatSubmit.disabled = !enable || trimmed.length === 0;
+  };
+
+  const refreshTextChatState = () => {
+    const isTextMode = currentModality === 'text';
+    const enable = isTextMode && isConnected;
+
+    if (textChatForm) {
+      textChatForm.style.display = isTextMode ? 'flex' : 'none';
+    }
+
+    if (textChatInput) {
+      textChatInput.disabled = !enable;
+      if (!enable) {
+        textChatInput.value = textChatInput.value.trim();
+      }
+    }
+
+    if (textChatHint) {
+      textChatHint.style.display = isTextMode ? 'block' : 'none';
+      if (isTextMode) {
+        textChatHint.textContent = enable
+          ? 'テキストでメッセージを送信できます。'
+          : '接続後にテキストでメッセージを送信できます。';
+      }
+    }
+
+    updateTextSubmitState();
+  };
+
+  const updateModalityUI = () => {
+    modalityButtons.forEach((button) => {
+      const modality = button.dataset.modality as Modality | undefined;
+      const isActive = modality === currentModality;
+      button.classList.toggle('is-selected', isActive);
+      button.setAttribute('aria-checked', isActive ? 'true' : 'false');
+    });
+
+    refreshTextChatState();
+  };
+
+  const updateMicrophoneState = () => {
+    if (!session) return;
+    const shouldMute = currentModality === 'text';
+    try {
+      session.mute(shouldMute);
+      console.log(
+        shouldMute
+          ? '🔇 Microphone muted because text mode is active'
+          : '🎙️ Microphone unmuted for voice mode'
+      );
+    } catch (error) {
+      console.error('Failed to update microphone state:', error);
+    }
+
+    if (shouldMute) {
+      hideRecordingIndicator();
+    }
+  };
+
+  const setCurrentModality = (modality: Modality) => {
+    if (currentModality === modality) return;
+    currentModality = modality;
+    lastOutputModalities = null;
+    updateModalityUI();
+    updateMicrophoneState();
+    if (session) {
+      syncSessionInstructions(lastDynamicContext);
+    }
+  };
+
+  const maybeSuppressResponse = (response: any): boolean => {
+    if (!response) return false;
+    const purpose = response.metadata?.purpose || response.metadata?.Purpose;
+    if (purpose && suppressedPurposeSet.has(String(purpose))) {
+      if (response.id) {
+        suppressedResponseIds.add(response.id);
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const recordSuppressedItemId = (item: any) => {
+    const itemId = item?.id;
+    if (typeof itemId === 'string' && itemId.length > 0) {
+      suppressedItemIds.add(itemId);
+    }
+  };
+
+  const syncSessionInstructions = (dynamic?: DynamicPromptContext | null) => {
+    if (!session) return;
+    const effectiveContext = dynamic ?? undefined;
+    const instructions = computeInstructions(effectiveContext);
+    const desiredModalities = getDesiredOutputModalities();
+    const instructionsChanged = instructions !== lastInstructionsSent;
+    const modalitiesChanged = !modalitiesAreEqual(lastOutputModalities, desiredModalities);
+    if (!instructionsChanged && !modalitiesChanged) {
+      return;
+    }
+    try {
+      session.transport.updateSessionConfig({
+        instructions,
+        outputModalities: desiredModalities
+      });
+      lastInstructionsSent = instructions;
+      lastOutputModalities = [...desiredModalities];
+      console.log('🧭 Updated live coaching instructions', {
+        mode: effectiveContext?.mode,
+        hasDynamic: Boolean(effectiveContext),
+        modalities: desiredModalities.join(', ')
+      });
+    } catch (error) {
+      console.error('Failed to update session instructions:', error);
+    }
+  };
+
+  const handleAnalysisUpdate = (analysis: CoachingAnalysis) => {
+    lastDynamicContext = {
+      mode: analysis.mode,
+      summary: analysis.summary,
+      rationale: analysis.rationale,
+      coachFocus: analysis.coachFocus,
+      questions: analysis.questions,
+      confidence: analysis.confidence
+    };
+    syncSessionInstructions(lastDynamicContext);
+  };
+
+  const modeFillElements: Record<ModeKey, HTMLElement | null> = {
+    reflective: document.querySelector<HTMLElement>('[data-mode-fill="reflective"]'),
+    discovery: document.querySelector<HTMLElement>('[data-mode-fill="discovery"]'),
+    actionable: document.querySelector<HTMLElement>('[data-mode-fill="actionable"]'),
+    cognitive: document.querySelector<HTMLElement>('[data-mode-fill="cognitive"]')
   }
 
-  const phaseScoreElements: Record<PhaseKey, HTMLElement | null> = {
-    opening: document.querySelector<HTMLElement>('[data-phase-score="opening"]'),
-    reflection: document.querySelector<HTMLElement>('[data-phase-score="reflection"]'),
-    insight: document.querySelector<HTMLElement>('[data-phase-score="insight"]'),
-    integration: document.querySelector<HTMLElement>('[data-phase-score="integration"]'),
-    closing: document.querySelector<HTMLElement>('[data-phase-score="closing"]')
+  const modeScoreElements: Record<ModeKey, HTMLElement | null> = {
+    reflective: document.querySelector<HTMLElement>('[data-mode-score="reflective"]'),
+    discovery: document.querySelector<HTMLElement>('[data-mode-score="discovery"]'),
+    actionable: document.querySelector<HTMLElement>('[data-mode-score="actionable"]'),
+    cognitive: document.querySelector<HTMLElement>('[data-mode-score="cognitive"]')
+  }
+
+  const storageAvailable = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+  const getStoredQuestionnaire = (): QuestionnaireResponses | null => {
+    if (!storageAvailable) return null;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEYS.questionnaire);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+      console.warn('Failed to read stored questionnaire responses:', error);
+      return null;
+    }
+  };
+
+  const setStoredQuestionnaire = (responses: QuestionnaireResponses | null) => {
+    if (!storageAvailable) return;
+    try {
+      if (!responses || Object.keys(responses).length === 0) {
+        window.localStorage.removeItem(STORAGE_KEYS.questionnaire);
+      } else {
+        window.localStorage.setItem(STORAGE_KEYS.questionnaire, JSON.stringify(responses));
+      }
+    } catch (error) {
+      console.warn('Failed to persist questionnaire responses:', error);
+    }
+  };
+
+  const getStoredPurpose = (): string | null => {
+    if (!storageAvailable) return null;
+    try {
+      return window.localStorage.getItem(STORAGE_KEYS.purpose);
+    } catch (error) {
+      console.warn('Failed to read stored session purpose:', error);
+      return null;
+    }
+  };
+
+  const setStoredPurpose = (value: string | null) => {
+    if (!storageAvailable) return;
+    try {
+      if (value) {
+        window.localStorage.setItem(STORAGE_KEYS.purpose, value);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEYS.purpose);
+      }
+    } catch (error) {
+      console.warn('Failed to persist session purpose:', error);
+    }
+  };
+
+  const getStoredSidebarHidden = (): boolean => {
+    if (!storageAvailable) return false;
+    try {
+      return window.localStorage.getItem(STORAGE_KEYS.sidebarHidden) === 'true';
+    } catch (error) {
+      console.warn('Failed to read stored sidebar state:', error);
+      return false;
+    }
+  };
+
+  const setStoredSidebarHidden = (hidden: boolean) => {
+    if (!storageAvailable) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.sidebarHidden, String(hidden));
+    } catch (error) {
+      console.warn('Failed to persist sidebar state:', error);
+    }
+  };
+
+  const storedQuestionnaire = getStoredQuestionnaire();
+  const storedPurpose = getStoredPurpose();
+  const storedSidebarHidden = getStoredSidebarHidden();
+  let storedSidebarPreference = storedSidebarHidden;
+  let hasAppliedStoredSidebarPreference = false;
+
+  const setSidebarOpen = (
+    open: boolean,
+    options: { persist?: boolean; focusTarget?: 'close' | 'trigger' | null } = {}
+  ) => {
+    const { persist = true, focusTarget = null } = options;
+    if (configSidebar) {
+      configSidebar.classList.toggle('is-open', open);
+      configSidebar.setAttribute('aria-hidden', String(!open));
+    }
+    if (configSidebarBackdrop) {
+      configSidebarBackdrop.classList.toggle('is-open', open);
+    }
+    if (configOpenBtn) {
+      configOpenBtn.setAttribute('aria-expanded', String(open));
+    }
+
+    if (open) {
+      document.body.classList.add('config-sidebar-open');
+      if (focusTarget === 'close' && !(configCloseBtn?.disabled)) {
+        configCloseBtn?.focus();
+      }
+    } else {
+      document.body.classList.remove('config-sidebar-open');
+      if (focusTarget === 'trigger' && !(configOpenBtn?.disabled)) {
+        configOpenBtn?.focus();
+      }
+    }
+
+    if (persist) {
+      setStoredSidebarHidden(!open);
+      storedSidebarPreference = !open;
+    }
+  };
+
+  const updateSidebarControlsAvailability = () => {
+    const lockControls = !questionnaireIsComplete;
+    if (configCloseBtn) {
+      configCloseBtn.disabled = lockControls;
+    }
+    if (configOpenBtn) {
+      if (lockControls) {
+        configOpenBtn.setAttribute('aria-disabled', 'true');
+        configOpenBtn.disabled = true;
+      } else {
+        configOpenBtn.removeAttribute('aria-disabled');
+        configOpenBtn.disabled = false;
+      }
+    }
+  };
+
+  setSidebarOpen(configSidebar?.classList.contains('is-open') ?? false, { persist: false });
+
+  const refreshCoachOptionClasses = () => {
+    coachOptionLabels.forEach((label) => {
+      const input = label.querySelector<HTMLInputElement>('input[type="radio"]');
+      if (!input) return;
+      if (input.checked) {
+        label.classList.add('is-selected');
+      } else {
+        label.classList.remove('is-selected');
+      }
+    });
+  };
+
+  const collectQuestionnaireResponses = (): QuestionnaireResponses => {
+    const responses: QuestionnaireResponses = {};
+    questionnaireQuestionIds.forEach((questionId) => {
+      const fieldset = coachCalibratorForm?.querySelector(`[data-question-id="${questionId}"]`);
+      const selected = fieldset?.querySelector<HTMLInputElement>('input[type="radio"]:checked');
+      if (selected) {
+        responses[questionId] = selected.value;
+      }
+    });
+    return responses;
+  };
+
+  const updateCoachRecommendation = () => {
+    const responses = collectQuestionnaireResponses();
+    if (storageAvailable) {
+      setStoredQuestionnaire(Object.keys(responses).length > 0 ? responses : null);
+    }
+    const complete = questionnaireQuestionIds.every((questionId) => Boolean(responses[questionId]));
+    questionnaireIsComplete = complete;
+    updateSidebarControlsAvailability();
+
+    if (!complete) {
+      activePersonalityId = defaultPersonalityId;
+      lastPreferenceDirectives = [];
+      const fallbackPreset = getPersonalityPreset(activePersonalityId);
+      currentPersonalityPreset = fallbackPreset;
+      if (coachRecommendationLabel) {
+        coachRecommendationLabel.textContent = fallbackPreset.label;
+      }
+      if (coachRecommendationDescription) {
+        coachRecommendationDescription.textContent = defaultRecommendationMessage;
+      }
+      if (coachRecommendationRationale) {
+        coachRecommendationRationale.style.display = 'none';
+        coachRecommendationRationale.textContent = '';
+      }
+      hasAppliedStoredSidebarPreference = false;
+      storedSidebarPreference = false;
+      setSidebarOpen(true, { persist: false });
+      if (session) {
+        syncSessionInstructions(lastDynamicContext);
+      }
+      return;
+    }
+
+    const recommendation = computePersonalityRecommendation(responses);
+    activePersonalityId = recommendation.personalityId;
+    lastPreferenceDirectives = recommendation.preferenceDirectives;
+    const preset = getPersonalityPreset(activePersonalityId);
+    currentPersonalityPreset = preset;
+
+    if (coachRecommendationLabel) {
+      coachRecommendationLabel.textContent = preset.label;
+    }
+    if (coachRecommendationDescription) {
+      coachRecommendationDescription.textContent = preset.description;
+    }
+    if (coachRecommendationRationale) {
+      const summaries = recommendation.preferenceSummaries;
+      const rationaleText = recommendation.rationale;
+      const combinedMessages = [...summaries, ...rationaleText];
+      if (combinedMessages.length > 0) {
+        coachRecommendationRationale.textContent = combinedMessages.join('／');
+        coachRecommendationRationale.style.display = 'block';
+      } else {
+        coachRecommendationRationale.textContent = '';
+        coachRecommendationRationale.style.display = 'none';
+      }
+    }
+
+    if (session) {
+      syncSessionInstructions(lastDynamicContext);
+    }
+
+    if (!hasAppliedStoredSidebarPreference) {
+      setSidebarOpen(!storedSidebarPreference, { persist: false });
+      hasAppliedStoredSidebarPreference = true;
+    }
+  };
+
+  const updatePurposeDescription = () => {
+    const preset = getSessionPurposePreset(purposeSelect?.value || defaultPurposeId);
+    currentPurposePreset = preset;
+    if (purposeDescriptionEl) {
+      purposeDescriptionEl.textContent = preset.description;
+    }
+  };
+
+  if (purposeSelect && !purposeSelect.value) {
+    purposeSelect.value = defaultPurposeId;
+  }
+
+  if (purposeSelect && storedPurpose && Array.from(purposeSelect.options).some((option) => option.value === storedPurpose)) {
+    purposeSelect.value = storedPurpose;
+  }
+
+  if (storedQuestionnaire) {
+    questionnaireQuestionIds.forEach((questionId) => {
+      const storedValue = storedQuestionnaire[questionId];
+      if (!storedValue) return;
+      const input = coachCalibratorForm?.querySelector<HTMLInputElement>(`input[type="radio"][name="coach-q-${questionId}"][value="${storedValue}"]`);
+      if (input) {
+        input.checked = true;
+      }
+    });
+  }
+
+  if (coachCalibratorInputs.length > 0) {
+    coachCalibratorInputs.forEach((input) => {
+      input.addEventListener('change', () => {
+        refreshCoachOptionClasses();
+        updateCoachRecommendation();
+      });
+    });
+  }
+
+  if (modalityButtons.length > 0) {
+    modalityButtons.forEach((button, index) => {
+      button.addEventListener('click', () => {
+        const modality = (button.dataset.modality as Modality | undefined) ?? 'voice';
+        setCurrentModality(modality);
+      });
+
+      button.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+        event.preventDefault();
+        const offset = event.key === 'ArrowRight' ? 1 : -1;
+        const nextIndex = (index + offset + modalityButtons.length) % modalityButtons.length;
+        const nextButton = modalityButtons[nextIndex];
+        nextButton.focus();
+        const modality = (nextButton.dataset.modality as Modality | undefined) ?? 'voice';
+        setCurrentModality(modality);
+      });
+    });
+  }
+
+  if (textChatInput) {
+    textChatInput.addEventListener('input', updateTextSubmitState);
+  }
+
+  updateModalityUI();
+
+  if (purposeSelect) {
+    purposeSelect.addEventListener('change', () => {
+      updatePurposeDescription();
+      setStoredPurpose(purposeSelect.value || null);
+      if (session) {
+        syncSessionInstructions(lastDynamicContext);
+      }
+    });
+  }
+
+  if (configOpenBtn) {
+    configOpenBtn.addEventListener('click', () => {
+      setSidebarOpen(true, { persist: false, focusTarget: 'close' });
+    });
+  }
+
+  if (configCloseBtn) {
+    configCloseBtn.addEventListener('click', () => {
+      if (!questionnaireIsComplete) return;
+      setSidebarOpen(false, { focusTarget: 'trigger' });
+    });
+  }
+
+  if (configSidebarBackdrop) {
+    configSidebarBackdrop.addEventListener('click', () => {
+      if (!questionnaireIsComplete) return;
+      setSidebarOpen(false, { focusTarget: 'trigger' });
+    });
+  }
+
+  if (configSidebarSurface) {
+    configSidebarSurface.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && questionnaireIsComplete) {
+        event.preventDefault();
+        setSidebarOpen(false, { focusTarget: 'trigger' });
+      }
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!questionnaireIsComplete) return;
+    if (!configSidebar?.classList.contains('is-open')) return;
+    const target = event.target as Node | null;
+    if (!target) return;
+    if (configSidebarSurface?.contains(target)) return;
+    if (configOpenBtn?.contains(target)) return;
+    setSidebarOpen(false, { focusTarget: 'trigger' });
+  });
+
+  refreshCoachOptionClasses();
+  updateCoachRecommendation();
+  updatePurposeDescription();
+
+  if (configSidebar?.classList.contains('is-open')) {
+    document.body.classList.add('config-sidebar-open');
+  } else {
+    document.body.classList.remove('config-sidebar-open');
   }
 
   updateConnectionStatus(false);
@@ -76,7 +987,7 @@ export function setupVoiceAgent() {
     try {
       sessionAnalyzer?.markSummaryInitiated();
 
-      addMessageToLog('user', 'セッションのまとめを要求しました。');
+      recordLocalUserMessage('セッションのまとめを要求しました。');
 
       session.sendMessage({
         type: 'message',
@@ -227,9 +1138,85 @@ export function setupVoiceAgent() {
     });
   }
 
+  if (textChatForm && textChatInput) {
+    textChatInput.addEventListener('input', updateTextSubmitState);
+    textChatInput.addEventListener('compositionstart', () => {
+      isTextChatComposing = true;
+    });
+    textChatInput.addEventListener('compositionend', () => {
+      isTextChatComposing = false;
+      updateTextSubmitState();
+    });
+    textChatInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return;
+      }
+      if (event.isComposing || isTextChatComposing) {
+        return;
+      }
+      if (currentModality !== 'text') {
+        return;
+      }
+      event.preventDefault();
+      if (textChatSubmit?.disabled) {
+        return;
+      }
+      if ('requestSubmit' in textChatForm) {
+        textChatForm.requestSubmit();
+      } else {
+        textChatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    });
+
+    textChatForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!session || !isConnected || currentModality !== 'text') {
+        if (textChatHint) {
+          textChatHint.textContent = '接続後にテキストでメッセージを送信できます。';
+          textChatHint.style.display = 'block';
+        }
+        return;
+      }
+
+      const message = textChatInput.value.trim();
+      if (!message) {
+        updateTextSubmitState();
+        return;
+      }
+
+      recordLocalUserMessage(message);
+
+      try {
+        session.sendMessage({
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: message
+            }
+          ]
+        });
+        textChatInput.value = '';
+        updateTextSubmitState();
+        textChatInput.focus();
+      } catch (error) {
+        console.error('Failed to send text message:', error);
+        alert('メッセージの送信に失敗しました。接続状態を確認してください。');
+      }
+    });
+  }
+
   function updateConnectionStatus(connected: boolean, connecting: boolean = false) {
     isConnected = connected;
     const hasUsageData = getHasUsageData();
+
+    if (purposeSelect) {
+      purposeSelect.disabled = connected || connecting;
+    }
+    coachCalibratorInputs.forEach((input) => {
+      input.disabled = connected || connecting;
+    });
 
     if (connecting) {
       statusElement.textContent = '接続中...';
@@ -272,13 +1259,6 @@ export function setupVoiceAgent() {
       }
     }
 
-    // Show/hide usage stats - keep visible if we have usage data
-    const usageStatsEl = document.getElementById('usage-stats');
-    if (usageStatsEl) {
-      // Show if connected OR if we have usage data from a previous session
-      usageStatsEl.style.display = (connected || hasUsageData) ? 'flex' : 'none';
-    }
-
     // Show/hide conversation log based on connection status
     if (connected) {
       showConversationLog();
@@ -286,20 +1266,7 @@ export function setupVoiceAgent() {
       hideConversationLog(hasUsageData);
     }
 
-    // Update usage stats title when disconnected but showing final stats
-    const usageTitle = usageStatsEl?.querySelector('h3');
-    if (usageTitle) {
-      if (connected) {
-        usageTitle.textContent = '📊 Usage Statistics (Live)';
-        usageTitle.style.color = '#22c55e';
-      } else if (hasUsageData) {
-        usageTitle.textContent = '📊 Final Usage Statistics';
-        usageTitle.style.color = '#f97316';
-      } else {
-        usageTitle.textContent = '📊 Usage Statistics';
-        usageTitle.style.color = '#22c55e';
-      }
-    }
+    refreshTextChatState();
   }
 
   async function generateEphemeralToken(): Promise<string> {
@@ -342,203 +1309,63 @@ export function setupVoiceAgent() {
     try {
       // Generate a new ephemeral token automatically
       ephemeralToken = await generateEphemeralToken();
+      if (!questionnaireIsComplete) {
+        console.warn('Coach style questionnaire is incomplete. Using default personality preset.');
+      }
+      const personalityPreset = getPersonalityPreset(activePersonalityId);
+      const purposePreset = getSessionPurposePreset(purposeSelect?.value || defaultPurposeId);
+      currentPersonalityPreset = personalityPreset;
+      currentPurposePreset = purposePreset;
+      lastDynamicContext = null;
+      lastOutputModalities = null;
+      suppressedResponseIds.clear();
+      suppressedItemIds.clear();
+
+      const instructions = buildAgentInstructions(personalityPreset, purposePreset, lastPreferenceDirectives);
+      lastInstructionsSent = instructions;
+      const initialModalities = getDesiredOutputModalities();
+      lastOutputModalities = [...initialModalities];
+
+      console.log('🎛️ Starting session with presets:', {
+        personality: personalityPreset.id,
+        purpose: purposePreset.id,
+        questionnaireCompleted: questionnaireIsComplete,
+        preferenceDirectives: lastPreferenceDirectives
+      });
+
       // Create the agent
       const agent = new RealtimeAgent({
         name: 'Coach',
-        instructions: `# Role & Objective
-You are a PROFESSIONAL ICF-CERTIFIED COACH facilitating a structured weekly reflection session. Your objective is to guide the client through meaningful reflection on their past week while supporting their growth and learning through powerful questions and active listening.
-
-# CRITICAL: Avoid Question Repetition
-- ALWAYS review the conversation history before asking questions
-- NEVER repeat similar questions or topics already explored
-- If a topic has been discussed, approach it from a completely different angle or move to unexplored areas
-- Build on previous responses rather than asking variations of the same question
-
-# Personality & Tone
-## Personality
-Warm, professional, curious, and genuinely interested in the client's development. Embody trust, safety, and presence.
-
-## Tone
-Encouraging, non-judgmental, confident yet humble. Speak with authentic warmth and professional competence.
-
-## Length
-Keep responses to 2-3 sentences per turn to maintain natural conversation flow.
-
-## Pacing
-Speak at a natural, calming pace. Allow for pauses and silence to give the client space to think and reflect.
-
-# ICF Core Competencies Integration
-## Foundation (A)
-- DEMONSTRATE ETHICAL PRACTICE: Maintain complete confidentiality and respect for the client's autonomy
-- EMBODY COACHING MINDSET: Stay curious, flexible, and client-centered throughout the session
-
-## Co-Creating Relationship (B)
-- ESTABLISH AGREEMENTS: Begin each session by confirming the weekly reflection focus
-- CULTIVATE TRUST AND SAFETY: Create space for honest sharing about challenges and successes
-- MAINTAIN PRESENCE: Stay fully focused and responsive to the client's words and emotions
-
-## Communicating Effectively (C)
-- LISTEN ACTIVELY: Pay attention to what's said and unsaid, reflecting back key themes
-- EVOKE AWARENESS: Use powerful questions to help the client discover insights about their week
-
-## Cultivating Learning & Growth (D)
-- FACILITATE CLIENT GROWTH: Help translate weekly insights into actionable learning and forward momentum
-
-# Weekly Reflection Conversation Flow
-## Opening & Agenda Setting (1-2 minutes)
-Goal: Create safety and establish the session focus
-
-How to respond:
-- Welcome warmly and confirm this is their weekly reflection time
-- Briefly explain the 10-minute structure: reflection → insights → forward planning
-- Ask what aspect of their week they'd most like to explore
-
-Sample opening phrases (vary, don't repeat):
-- "Welcome to your weekly reflection space. I'm here to support your thinking about the week that's passed."
-- "Let's create some dedicated time for you to process your week. What's alive for you right now?"
-- "This is your time to pause and reflect. What from this week is calling for your attention?"
-
-Exit when: Client shares an initial focus area or significant theme from their week.
-
-## Deep Reflection (4-5 minutes)
-Goal: Explore the week's experiences, patterns, emotions, and learning
-
-Key ICF-based questioning approaches:
-- What themes emerge when you think about this week?
-- Where did you feel most energized? Most drained?
-- What challenged you in ways that felt growth-promoting?
-- When did you feel most aligned with your values this week?
-- What patterns are you noticing about how you respond to...?
-- What's important about that experience for you?
-
-How to respond:
-- Use powerful questions to deepen reflection
-- Reflect back themes and emotions you hear
-- Notice energy shifts and explore them
-- Create space for silence and processing
-
-Exit when: Client has thoroughly explored their week and seems ready to extract insights.
-
-## Insight Synthesis (2-3 minutes)
-Goal: Help the client identify key learnings and themes
-
-How to respond:
-- "What insights are emerging for you about this week?"
-- "What do you want to remember or hold onto from this reflection?"
-- "What's one thing you're learning about yourself?"
-
-Exit when: Client has articulated 1-2 clear insights or learnings.
-
-## Forward Integration (2-3 minutes)
-Goal: Connect insights to future action and growth
-
-How to respond (choose ONE approach based on conversation flow):
-- **Awareness Application**: "How might this awareness serve you in the coming week?"
-- **Value Extraction**: "What from today's reflection feels most important to carry forward?"
-- **Intentional Action**: "Given these insights, what specific area do you want to be intentional about?"
-
-IMPORTANT: Select the approach that builds most naturally on what the client has already shared, avoiding repetition of explored themes.
-
-Exit when: Client has identified specific ways to apply their learning.
-
-## Closing (1 minute)
-Goal: Acknowledge the reflection work and close meaningfully
-
-How to respond:
-- Acknowledge the depth of their reflection
-- Summarize key themes if helpful
-- Close with appreciation for their commitment to growth
-
-# Language Guidelines
-## Language Matching
-Respond in the same language as the client unless they indicate otherwise.
-
-## Unclear Audio Handling
-- Only respond to clear audio input
-- If audio is unclear, say: "I want to make sure I'm fully present with you - could you repeat that?"
-- If there's background noise: "There seems to be some background sound - can you say that again?"
-
-# Powerful Questions for Weekly Reflection
-Use these as inspiration, but adapt to the client's specific sharing:
-
-## Opening Questions
-- What wants your attention from this week?
-- As you scan back over the week, what stands out?
-- What themes emerge when you think about these past seven days?
-
-## Exploring Experiences
-- What was most alive for you this week?
-- Where did you surprise yourself?
-- What drained your energy? What gave you energy?
-- When did you feel most like yourself?
-- What challenged you in productive ways?
-
-## Pattern Recognition
-- What patterns are you noticing?
-- How is this similar to or different from other weeks?
-- What does this tell you about what matters to you?
-
-## Values & Alignment
-- When did you feel most aligned with your values?
-- What moments felt authentic and true to who you are?
-- Where might you have been living from habit rather than intention?
-
-## Learning & Growth
-- What are you learning about yourself?
-- What capability did you use or develop this week?
-- What would you do differently if you had the week to live again?
-
-## Forward Integration (avoid repetition - choose based on unexplored angles)
-- **Future Application**: What from this week do you want to carry forward?
-- **Growth Leverage**: How might this insight serve you going forward?
-- **Intentional Focus**: What feels important to be intentional about next week?
-- **Integration Support**: What support or reminder would help you apply this learning?
-- **Obstacle Awareness**: What might get in the way of applying this insight, and how will you navigate that?
-
-# Safety & Escalation
-- If client shares significant emotional distress or mental health concerns, respond with empathy and suggest they consider professional support
-- Stay within coaching scope - avoid therapy, advice-giving, or problem-solving
-- If conversation veers into areas requiring expertise beyond coaching, gently redirect to reflection
-
-# Key Coaching Behaviors
-- ASK rather than tell
-- REFLECT what you hear without adding interpretation
-- CREATE SPACE for silence and processing
-- FOLLOW the client's agenda and interests
-- TRUST the client's wisdom and capability
-- NOTICE patterns, themes, and energy shifts
-- STAY CURIOUS about the client's experience
-- **AVOID REPETITION**: Before asking any question, mentally check if similar ground has been covered
-- **BUILD FORWARD**: Use previous responses as foundation for deeper or different exploration
-
-# Anti-Repetition Guidelines
-1. **Before each question**: Scan recent conversation for similar themes or questions
-2. **If topic was discussed**: Either go deeper into an unexplored aspect or move to a completely different area
-3. **When in doubt**: Ask about something that builds on their last response rather than starting fresh
-4. **Integration phase**: Choose ONE focused direction rather than asking multiple similar "next week" questions
-
-Remember: Your role is to facilitate THEIR reflection and insight, not to provide answers or advice. Trust the client as the expert on their own life and experience. AVOID asking questions that sound like variations of what you've already explored.`,
+        instructions
       });
 
       // Create the session
       session = new RealtimeSession(agent, {
         model: 'gpt-realtime',
+        config: {
+          outputModalities: initialModalities
+        }
       });
+
+      if (currentModality === 'text') {
+        updateMicrophoneState();
+      }
 
       sessionAnalyzer?.dispose();
       sessionAnalyzer = new SessionAnalyzer({
         session,
         controls: {
           panel: progressPanel || null,
-          phaseFills: phaseFillElements,
-          phaseScores: phaseScoreElements,
-          currentPhase: currentPhaseEl || null,
+          modeFills: modeFillElements,
+          modeScores: modeScoreElements,
+          currentMode: currentModeEl || null,
           progressNotes: progressNotesEl || null,
           closureContainer: closureSuggestionEl || null,
           closureMessage: closureMessageEl || null
         },
         initialAutoSummary: autoSummaryToggle?.checked ?? true,
-        onRequestSummary: () => requestSessionSummary(true)
+        onRequestSummary: () => requestSessionSummary(true),
+        onAnalysisUpdate: handleAnalysisUpdate
       });
 
       if (autoSummaryToggle) {
@@ -556,9 +1383,17 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         if (event.type.includes('audio')) {
           console.log(`🔊 AUDIO EVENT: ${event.type}`, event);
         }
+        if (event.type === 'response.created') {
+          maybeSuppressResponse(event.response);
+        } else if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
+          if (event.response_id && suppressedResponseIds.has(event.response_id)) {
+            recordSuppressedItemId(event.item);
+          }
+        }
         if (event.type === 'session.created') {
           console.log('Connected to OpenAI Realtime API');
           updateConnectionStatus(true);
+          updateMicrophoneState();
           startUsageTracking(session!);
           startSessionTimer();
         } else if (event.type === 'error' || event.type === 'close') {
@@ -585,27 +1420,45 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           // User's speech has been transcribed
           const transcript = event.transcript;
           if (transcript && transcript.trim()) {
-            addMessageToLog('user', transcript.trim());
+            recordLocalUserMessage(transcript);
           }
-        } else if (event.type === 'response.text.delta') {
+        } else if (event.type === 'response.output_text.delta') {
           // Handle streaming text responses from assistant (for text mode)
-          console.log('Assistant text delta:', event.delta);
-        } else if (event.type === 'response.text.done') {
-          // Complete text response from assistant (for text mode)
-          const text = event.text;
-          if (text && text.trim()) {
-            addMessageToLog('assistant', text.trim());
+          if (!event.response_id || !suppressedResponseIds.has(event.response_id)) {
+            console.log('Assistant text delta:', event.delta);
           }
-        } else if (event.type === 'conversation.item.created') {
+        } else if (event.type === 'response.output_text.done') {
+          // Complete text response from assistant (for text mode)
+          if (!event.response_id || !suppressedResponseIds.has(event.response_id)) {
+            const text = event.text;
+            if (text && text.trim()) {
+              addMessageToLog('assistant', text.trim());
+            }
+          }
+        } else if (event.type === 'conversation.item.created' || event.type === 'conversation.item.added') {
           // Handle conversation items (messages)
           const item = event.item;
           if (item && item.content) {
-            const content = Array.isArray(item.content) ?
-              item.content.map((c: any) => c.text || c.transcript || '').join(' ') :
-              item.content.text || item.content.transcript || '';
+            if (!suppressedItemIds.has(item.id)) {
+              const content = Array.isArray(item.content) ?
+                item.content.map((c: any) => c.text || c.transcript || '').join(' ') :
+                item.content.text || item.content.transcript || '';
 
-            if (content.trim()) {
-              addMessageToLog(item.role === 'user' ? 'user' : 'assistant', content.trim());
+              const trimmedContent = content.trim();
+              if (trimmedContent) {
+                let shouldLog = true;
+                if (item.role === 'user') {
+                  const normalizedContent = normalizeForDedup(trimmedContent);
+                  const pendingIndex = pendingLocalUserMessages.indexOf(normalizedContent);
+                  if (pendingIndex !== -1) {
+                    pendingLocalUserMessages.splice(pendingIndex, 1);
+                    shouldLog = false;
+                  }
+                }
+                if (shouldLog) {
+                  addMessageToLog(item.role === 'user' ? 'user' : 'assistant', trimmedContent);
+                }
+              }
             }
           }
         } else if (event.type === 'response.audio_transcript.delta') {
@@ -649,7 +1502,11 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
           // Response completed - DO NOT stop animation here, let audio events handle it
           console.log('🎯 Response done - NOT stopping animation, waiting for audio events');
 
-          if (event.response && event.response.output) {
+          const response = event.response;
+          const suppressed = maybeSuppressResponse(response);
+          if (suppressed) {
+            (response?.output ?? []).forEach((item: any) => recordSuppressedItemId(item));
+          } else if (response && response.output) {
             event.response.output.forEach((item: any) => {
               if (item.type === 'message' && item.role === 'assistant') {
                 const content = item.content;
@@ -696,6 +1553,7 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
         if (session && !isConnected) {
           console.log('Voice agent connected! You can now speak to the assistant.');
           updateConnectionStatus(true);
+          updateMicrophoneState();
           startSessionTimer();
         }
       }, 1000);
@@ -722,6 +1580,11 @@ Remember: Your role is to facilitate THEIR reflection and insight, not to provid
 
     sessionAnalyzer?.dispose();
     sessionAnalyzer = null;
+    lastInstructionsSent = null;
+    lastDynamicContext = null;
+    lastOutputModalities = null;
+    suppressedResponseIds.clear();
+    suppressedItemIds.clear();
 
     // Add conversation end marker before disconnecting
     addConversationEndMarker();
