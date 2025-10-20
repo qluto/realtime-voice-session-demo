@@ -475,7 +475,7 @@ export function setupVoiceAgent() {
     buildAgentInstructions(currentPersonalityPreset, currentPurposePreset, lastPreferenceDirectives, dynamic);
 
   const getDesiredOutputModalities = (): ('audio' | 'text')[] =>
-    currentModality === 'text' ? ['text'] : ['audio', 'text'];
+    currentModality === 'text' ? ['text'] : ['audio'];
 
   const modalitiesAreEqual = (
     previous: ('audio' | 'text')[] | null,

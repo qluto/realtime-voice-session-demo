@@ -49,7 +49,7 @@
 #### 1.3 ユーザーインタラクション
 - **まとめ提案機能**
   - 判定が成立したら、`conversation.item.create`で`role: "assistant"`の提案メッセージ（例: "このセッションをまとめに移行しましょうか？"）を挿入。
-  - UIでは提案バナーを表示し、`response.create`で`output_modalities: ["text"]`か音声レスポンスを選択できるトグルを提供。
+  - UIでは提案バナーを表示し、`response.create`で`output_modalities: ["text"]`か音声レスポンス（`output_modalities: ["audio"]`）を選択できるトグルを提供。
 - **応答選択肢**
   - ユーザーが「まだ続ける」を選んだ場合は`response.create`（`conversation: "none"`, `metadata: { purpose: "dismissal" }`）を送り、モデルに次の深掘り質問を生成させる。
 
@@ -94,7 +94,7 @@ dataChannel.send(JSON.stringify({
 dataChannel.send(JSON.stringify({
   type: 'response.create',
   response: {
-    output_modalities: ['audio', 'text'],
+    output_modalities: ['audio'],
     instructions: 'セッションを短く振り返り、次のアクションを提案してクロージングしてください。'
   }
 }));
