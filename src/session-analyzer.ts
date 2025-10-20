@@ -433,7 +433,7 @@ export class SessionAnalyzer {
         response: {
           conversation: 'none',
           metadata: { purpose: 'summary-dismissed' },
-          output_modalities: ['audio', 'text'],
+          output_modalities: ['audio'],
           instructions: 'The client would like to continue exploring before summarizing. Ask one concise, powerful question that deepens reflection while maintaining the session language.'
         }
       })
