@@ -46,12 +46,6 @@ export function stopSessionTimer() {
   if (timerElement) {
     timerElement.style.display = 'none';
   }
-
-  // Update final duration in stats
-  const durationElement = document.getElementById('stat-session-duration');
-  if (durationElement) {
-    durationElement.textContent = formatTime(sessionDuration);
-  }
 }
 
 export function resetSessionTimer() {
@@ -62,12 +56,6 @@ export function resetSessionTimer() {
   const timerDisplay = document.getElementById('timer-display');
   if (timerDisplay) {
     timerDisplay.textContent = '00:00';
-  }
-
-  // Reset duration in stats
-  const durationElement = document.getElementById('stat-session-duration');
-  if (durationElement) {
-    durationElement.textContent = '00:00';
   }
 
   // Hide timer
