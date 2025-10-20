@@ -1,7 +1,13 @@
 import { RealtimeSession } from '@openai/agents/realtime'
-import type { CoachingMode } from './utils/prompt-presets'
-
-export type ModeKey = CoachingMode
+import {
+  ANALYSIS_COOLDOWN,
+  MAX_TRANSCRIPTS,
+  MODE_LABELS,
+  MODE_ORDER,
+  SUPPRESSION_WINDOW,
+  type ModeKey
+} from './session-analyzer/constants.ts'
+import { buildAnalysisPrompt } from './session-analyzer/prompt-builder.ts'
 
 export type CoachingAnalysis = {
   summary: string
@@ -35,19 +41,6 @@ type SessionAnalyzerOptions = {
   onRequestSummary: () => Promise<void> | void
   onAnalysisUpdate?: (analysis: CoachingAnalysis) => void
 }
-
-const MODE_LABELS: Record<ModeKey, string> = {
-  reflective: 'Reflective（感情・価値の内省）',
-  discovery: 'Discovery（目標と選択肢の探求）',
-  actionable: 'Actionable（行動と合意づくり）',
-  cognitive: 'Cognitive（視点の転換）'
-}
-
-const MODE_ORDER: ModeKey[] = ['reflective', 'discovery', 'actionable', 'cognitive']
-
-const ANALYSIS_COOLDOWN = 15_000
-const MAX_TRANSCRIPTS = 40
-const SUPPRESSION_WINDOW = 120_000
 
 export class SessionAnalyzer {
   private session: RealtimeSession
@@ -249,7 +242,7 @@ export class SessionAnalyzer {
     this.pendingAnalysisEventId = `analysis_${Date.now()}`
 
     const transcriptSnippet = this.buildTranscriptSnippet()
-    const prompt = this.buildAnalysisPrompt(transcriptSnippet)
+    const prompt = buildAnalysisPrompt(transcriptSnippet)
 
     try {
       this.session.transport.sendEvent({
@@ -447,29 +440,6 @@ export class SessionAnalyzer {
     return recent
       .map((entry) => `${entry.role === 'client' ? 'Client' : 'Coach'}: ${entry.text}`)
       .join('\n')
-  }
-
-  private buildAnalysisPrompt(transcript: string): string {
-    return `You are a senior coaching supervisor helping an AI coach decide how to steer the next turn. Analyse the recent conversation snippet and respond with pure JSON matching the schema below. Use the four-mode compass: Reflective (emotions, meaning), Discovery (goal, reality, options), Actionable (commitment, accountability), Cognitive (reframe assumptions).
-{
-  "summary": string,                // 1 short sentence recap in conversation language when obvious, otherwise Japanese
-  "mode": "reflective" | "discovery" | "actionable" | "cognitive",
-  "mode_confidence": {
-    "reflective": number,           // 0-1 with two decimals
-    "discovery": number,
-    "actionable": number,
-    "cognitive": number
-  },
-  "rationale": string,             // why this mode now (<=2 sentences)
-  "coach_focus": string,           // where the coach should steer next (deepening or converging)
-  "questions": string[],           // 1-2 short coaching questions aligned with the chosen mode
-  "summary_ready": boolean,        // true if the session can move to wrap-up gracefully
-  "summary_reason": string         // Japanese explanation for why/why not
-}
-Keep the JSON compact. Values in mode_confidence must be numbers between 0 and 1. Do not add extra keys.
-
-Transcript:
-${transcript}`
   }
 
   private extractTextFromItem(item: any): string {

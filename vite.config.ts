@@ -8,5 +8,9 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts']
   }
 })
