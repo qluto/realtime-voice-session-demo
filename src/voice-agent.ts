@@ -1161,8 +1161,11 @@ export function setupVoiceAgent() {
       if (textChatSubmit?.disabled) {
         return;
       }
-      if ('requestSubmit' in textChatForm) {
-        textChatForm.requestSubmit();
+      const requestSubmit = (textChatForm as HTMLFormElement & {
+        requestSubmit?: (submitter?: HTMLElement) => void
+      }).requestSubmit;
+      if (typeof requestSubmit === 'function') {
+        requestSubmit.call(textChatForm);
       } else {
         textChatForm.dispatchEvent(new Event('submit', { cancelable: true }));
       }
