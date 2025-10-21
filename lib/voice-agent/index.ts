@@ -1,47 +1,54 @@
-import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime';
+import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime'
 import {
   addMessageToLog,
   addConversationEndMarker,
   clearConversationLog,
   showConversationLog,
   hideConversationLog
-} from './utils/conversation-logger';
+} from './utils/conversation-logger'
 import {
   startSessionTimer,
   stopSessionTimer
-} from './utils/session-timer';
+} from './utils/session-timer'
 import {
   startUsageTracking,
   stopUsageTracking,
   resetUsageStats,
   getHasUsageData
-} from './utils/usage-tracker';
+} from './utils/usage-tracker'
 import {
   showRecordingIndicator,
   hideRecordingIndicator,
   startSpeakingAnimation,
   stopSpeakingAnimation
-} from './utils/speaking-animation';
-import { SessionAnalyzer, type CoachingAnalysis, type ModeKey } from './session-analyzer';
+} from './utils/speaking-animation'
+import { SessionAnalyzer, type CoachingAnalysis } from './session-analyzer'
+import { type ModeKey } from './session-analyzer/constants.ts'
 import {
   getPersonalityPreset,
   getSessionPurposePreset,
   defaultPersonalityId,
   defaultPurposeId
-} from './utils/prompt-presets.ts';
-import { buildAgentInstructions, type DynamicPromptContext } from './voice-agent/prompt-builder.ts';
+} from './utils/prompt-presets.ts'
+import { buildAgentInstructions, type DynamicPromptContext } from './prompt-builder.ts'
 import {
   computePersonalityRecommendation,
   questionnaireQuestionIds,
   type PersonalityId,
   type QuestionnaireResponses
-} from './voice-agent/personality-recommendation.ts';
+} from './personality-recommendation.ts'
+
+declare global {
+  interface Window {
+    __voiceAgentInitialized?: boolean
+  }
+}
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
 let sessionAnalyzer: SessionAnalyzer | null = null;
 
-const tokenEndpoint = import.meta.env.VITE_TOKEN_ENDPOINT || '/api/generate-token';
+const tokenEndpoint = process.env.NEXT_PUBLIC_TOKEN_ENDPOINT || '/api/generate-token'
 
 const STORAGE_KEYS = {
   questionnaire: 'voiceCoach.questionnaire',
@@ -50,6 +57,9 @@ const STORAGE_KEYS = {
 } as const;
 
 export function setupVoiceAgent() {
+  if (typeof window === 'undefined') return
+  if (window.__voiceAgentInitialized) return
+  window.__voiceAgentInitialized = true
   const connectBtn = document.querySelector<HTMLButtonElement>('#connect-btn')!;
   const disconnectBtn = document.querySelector<HTMLButtonElement>('#disconnect-btn')!;
   const newSessionBtn = document.querySelector<HTMLButtonElement>('#new-session-btn')!;

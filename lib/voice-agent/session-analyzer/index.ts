@@ -6,8 +6,8 @@ import {
   MODE_ORDER,
   SUPPRESSION_WINDOW,
   type ModeKey
-} from './session-analyzer/constants.ts'
-import { buildAnalysisPrompt } from './session-analyzer/prompt-builder.ts'
+} from './constants.ts'
+import { buildAnalysisPrompt } from './prompt-builder.ts'
 
 export type CoachingAnalysis = {
   summary: string

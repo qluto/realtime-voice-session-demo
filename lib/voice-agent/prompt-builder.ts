@@ -4,7 +4,7 @@ import {
   type CoachingMode,
   type PersonalityPreset,
   type SessionPurposePreset
-} from '../utils/prompt-presets.ts'
+} from './utils/prompt-presets.ts'
 
 export const coachFoundations = `# ICF Core Competencies Integration
 ## Foundation (A)
