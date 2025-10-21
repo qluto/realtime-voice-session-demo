@@ -1,19 +1,21 @@
+import { NextResponse, type NextRequest } from 'next/server'
+
 const REALTIME_TOKEN_URL = 'https://api.openai.com/v1/realtime/client_secrets'
 
 const realtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime'
 
-export default async function handler(req: any, res: any) {
-  res.setHeader('Cache-Control', 'no-store')
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST')
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
+export async function POST(_request: NextRequest) {
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' })
+    return NextResponse.json({
+      error: 'OPENAI_API_KEY not configured'
+    }, {
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
+    })
   }
 
   try {
@@ -35,21 +37,48 @@ export default async function handler(req: any, res: any) {
 
     if (!upstreamResponse.ok || !data?.value) {
       const message = data?.error?.message || 'Failed to generate ephemeral token'
-      return res.status(upstreamResponse.status || 500).json({
+      return NextResponse.json({
         error: message,
         details: data
+      }, {
+        status: upstreamResponse.status || 500,
+        headers: {
+          'Cache-Control': 'no-store'
+        }
       })
     }
 
-    return res.status(200).json({
+    return NextResponse.json({
       token: data.value,
       expiresAt: data.expires_at ?? null
+    }, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return res.status(500).json({
+    return NextResponse.json({
       error: 'Network error while requesting token',
       details: message
+    }, {
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
     })
   }
+}
+
+export function GET() {
+  return NextResponse.json({
+    error: 'Method not allowed'
+  }, {
+    status: 405,
+    headers: {
+      Allow: 'POST',
+      'Cache-Control': 'no-store'
+    }
+  })
 }

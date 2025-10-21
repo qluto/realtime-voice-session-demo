@@ -63,10 +63,10 @@
   - 音声のみのインターフェースでも提案が届くよう、`response.output_audio.delta`で得た音声を再生しつつ、回避策としてテキスト通知も表示。
 
 #### 実装ファイル:
-- `src/voice-agent.ts`: 進行度評価とタイミング判定
-- `src/session-analyzer.ts`: 新規ファイル - 会話分析機能
-- `src/main.ts`: 進行度UI要素の追加
-- `src/style.css`: 進行度表示のスタイリング
+- `lib/voice-agent/index.ts`: 進行度評価とタイミング判定
+- `lib/voice-agent/session-analyzer/index.ts`: 会話分析機能
+- `components/realtime/ConversationPanel.tsx`: 進行度UI要素の追加
+- `app/globals.css`: 進行度表示のスタイリング
 
 ## 技術仕様
 

@@ -33,21 +33,17 @@ A professional coaching experience using OpenAI's GPT Realtime API with ICF Core
    OPENAI_API_KEY=sk-proj-your-key-here
    ```
 
-3. **Start both servers:**
+3. **Start the development server:**
    ```bash
-   # Option 1: Start both servers together
-   npm run dev:full
-
-   # Option 2: Start servers separately (in different terminals)
-   npm run server  # Token generation server (port 3001)
-   npm run dev     # Frontend development server (port 5173)
+   npm run dev
    ```
+   - `npm run dev:full` is available as a shortcut alias if you prefer the previous command
 
-4. **Open your browser** and navigate to http://localhost:5173
+4. **Open your browser** and navigate to http://localhost:3000
 
 ### Optional configuration
 
-- `VITE_TOKEN_ENDPOINT` — Override the token broker URL (defaults to `/api/generate-token`)
+- `NEXT_PUBLIC_TOKEN_ENDPOINT` — Override the token broker URL used by the browser (defaults to `/api/generate-token`)
 - `OPENAI_REALTIME_MODEL` — Override the realtime model requested from OpenAI (defaults to `gpt-realtime`)
 
 ## Deploying to Vercel
@@ -197,6 +193,6 @@ curl -X POST https://api.openai.com/v1/realtime/client_secrets \
 
 ## Architecture
 
-- **Frontend**: Vite + TypeScript + vanilla DOM manipulation
+- **Frontend**: Next.js + React + TypeScript with DOM orchestration helpers
 - **Voice Processing**: OpenAI Agents SDK with WebRTC transport
 - **Styling**: Modern CSS with dark/light mode support

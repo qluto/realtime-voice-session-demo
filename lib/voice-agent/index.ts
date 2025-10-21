@@ -1,46 +1,54 @@
-import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime';
+import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime'
 import {
   addMessageToLog,
   addConversationEndMarker,
   clearConversationLog,
   showConversationLog,
   hideConversationLog
-} from './utils/conversation-logger';
+} from './utils/conversation-logger'
 import {
   startSessionTimer,
   stopSessionTimer
-} from './utils/session-timer';
+} from './utils/session-timer'
 import {
   startUsageTracking,
   stopUsageTracking,
   resetUsageStats,
   getHasUsageData
-} from './utils/usage-tracker';
+} from './utils/usage-tracker'
 import {
   showRecordingIndicator,
   hideRecordingIndicator,
   startSpeakingAnimation,
   stopSpeakingAnimation
-} from './utils/speaking-animation';
-import { SessionAnalyzer, type CoachingAnalysis, type ModeKey } from './session-analyzer';
+} from './utils/speaking-animation'
+import { SessionAnalyzer, type CoachingAnalysis } from './session-analyzer'
+import { type ModeKey } from './session-analyzer/constants.ts'
 import {
   getPersonalityPreset,
   getSessionPurposePreset,
   defaultPersonalityId,
-  defaultPurposeId,
-  personalityPresets,
-  type PersonalityPreset,
-  type SessionPurposePreset,
-  coachingModeGuides,
-  coachingModeOrder,
-  type CoachingMode
-} from './utils/prompt-presets.ts';
+  defaultPurposeId
+} from './utils/prompt-presets.ts'
+import { buildAgentInstructions, type DynamicPromptContext } from './prompt-builder.ts'
+import {
+  computePersonalityRecommendation,
+  questionnaireQuestionIds,
+  type PersonalityId,
+  type QuestionnaireResponses
+} from './personality-recommendation.ts'
+
+declare global {
+  interface Window {
+    __voiceAgentInitialized?: boolean
+  }
+}
 
 let session: RealtimeSession | null = null;
 let isConnected = false;
 let sessionAnalyzer: SessionAnalyzer | null = null;
 
-const tokenEndpoint = import.meta.env.VITE_TOKEN_ENDPOINT || '/api/generate-token';
+const tokenEndpoint = process.env.NEXT_PUBLIC_TOKEN_ENDPOINT || '/api/generate-token'
 
 const STORAGE_KEYS = {
   questionnaire: 'voiceCoach.questionnaire',
@@ -48,360 +56,10 @@ const STORAGE_KEYS = {
   sidebarHidden: 'voiceCoach.sidebarHidden'
 } as const;
 
-const coachFoundations = `# ICF Core Competencies Integration
-## Foundation (A)
-- DEMONSTRATE ETHICAL PRACTICE: Maintain complete confidentiality and respect for the client's autonomy
-- EMBODY COACHING MINDSET: Stay curious, flexible, and client-centred throughout the session
-
-## Co-Creating Relationship (B)
-- ESTABLISH AGREEMENTS: Confirm scope, desired outcomes, and the client's ownership of the agenda
-- CULTIVATE TRUST AND SAFETY: Create space for honest sharing about challenges and successes
-- MAINTAIN PRESENCE: Stay fully focused and responsive to the client's words and emotions
-
-## Communicating Effectively (C)
-- LISTEN ACTIVELY: Pay attention to what's said and unsaid, reflecting back key themes
-- EVOKE AWARENESS: Use powerful questions to help the client discover insights that matter to them
-
-## Cultivating Learning & Growth (D)
-- FACILITATE CLIENT GROWTH: Support translating insight into intentional forward motion
-
-# Language Guidelines
-## Language Matching
-Respond in the same language as the client unless they indicate otherwise.
-
-## Unclear Audio Handling
-- Only respond to clear audio input
-- If audio is unclear, say: "I want to make sure I'm fully present with you - could you repeat that?"
-- If there's background noise: "There seems to be some background sound - can you say that again?"
-
-# Safety & Escalation
-- If the client shares significant emotional distress or mental health concerns, respond with empathy and suggest they consider professional support
-- Stay within coaching scope—avoid therapy, advice-giving, or problem-solving
-- If conversation veers into areas requiring expertise beyond coaching, gently redirect toward reflection
-
-# Key Coaching Behaviors
-- ASK rather than tell
-- REFLECT what you hear without adding interpretation
-- CREATE SPACE for silence and processing
-- FOLLOW the client's agenda and interests
-- TRUST the client's wisdom and capability
-- NOTICE patterns, themes, and energy shifts
-- STAY CURIOUS about the client's experience
-
-# Anti-Repetition Guidelines
-1. **Before each question**: Scan recent conversation for similar themes or questions
-2. **If a topic was discussed**: Either go deeper into an unexplored aspect or move to a completely different area
-3. **When in doubt**: Ask about something that builds on their last response rather than starting fresh
-4. **Integration phase**: Choose ONE focused direction rather than asking multiple similar "next" questions
-
-Remember: Your role is to facilitate THEIR reflection and insight, not to provide answers or advice. AVOID asking questions that sound like variations of what has already been explored.`;
-
-type DynamicPromptContext = {
-  mode?: CoachingMode
-  summary?: string
-  rationale?: string
-  coachFocus?: string
-  questions?: string[]
-  confidence?: Partial<Record<CoachingMode, number>>
-}
-
-function renderModeSection(mode: CoachingMode, purpose: SessionPurposePreset): string {
-  const guide = coachingModeGuides[mode];
-  const questionLines = guide.questionSeeds.map((item) => `- ${item}`).join('\n');
-  const moveLines = guide.coachingMoves.map((item) => `- ${item}`).join('\n');
-  const watchLines = guide.watchOuts.map((item) => `- ${item}`).join('\n');
-  const purposeNote = purpose.modeBiases[mode]
-    ? `Purpose nuance: ${purpose.modeBiases[mode]}`
-    : 'Purpose nuance: Use responsively based on client signals.';
-
-  return `## ${guide.label}
-${guide.description}
-Intention: ${guide.intention}
-${purposeNote}
-
-Question seeds to keep fresh:
-${questionLines}
-
-High-leverage moves:
-${moveLines}
-
-Watch-outs:
-${watchLines}`;
-}
-
-function formatConfidenceSnapshot(confidence?: Partial<Record<CoachingMode, number>>): string {
-  if (!confidence) return 'Live confidence pending — stay observant and choose the most resonant mode.';
-  const parts = coachingModeOrder.map((mode) => {
-    const value = Math.max(0, Math.min(1, confidence[mode] ?? 0));
-    const percent = Math.round(value * 100);
-    return `${coachingModeGuides[mode].label}: ${percent}%`;
-  });
-  return parts.join(', ');
-}
-
-function buildLiveCompassSection(purpose: SessionPurposePreset, dynamic?: DynamicPromptContext): string {
-  if (!dynamic || !dynamic.mode) {
-    const defaultMode = purpose.defaultMode;
-    const guide = coachingModeGuides[defaultMode];
-    const bias = purpose.modeBiases[defaultMode] ?? guide.intention;
-    const fallbackQuestions = guide.questionSeeds.slice(0, 2).map((item) => `- ${item}`).join('\n');
-    return `# Live Conversation Compass
-Current guidance: Begin with ${guide.label} mode to honour what matters now.
-Why: ${bias}
-Confidence snapshot: ${formatConfidenceSnapshot()}
-Ask 1-2 of these to open space:
-${fallbackQuestions}
-Flow into other modes as soon as client signals clarity or new needs.`;
-  }
-
-  const guide = coachingModeGuides[dynamic.mode];
-  const lines: string[] = [`Current mode: ${guide.label}`];
-  if (dynamic.summary) lines.push(`Mini-summary: ${dynamic.summary}`);
-  if (dynamic.rationale) lines.push(`Why now: ${dynamic.rationale}`);
-  if (dynamic.coachFocus) lines.push(`Next focus: ${dynamic.coachFocus}`);
-  lines.push(`Confidence snapshot: ${formatConfidenceSnapshot(dynamic.confidence)}`);
-
-  const questionList = (dynamic.questions && dynamic.questions.length > 0
-    ? dynamic.questions
-    : guide.questionSeeds.slice(0, 2)
-  ).map((item) => `- ${item}`).join('\n');
-
-  lines.push('Ask 1-2 of these questions next:');
-  lines.push(questionList);
-  lines.push('Stay agile—pivot to another mode when the client indicates a new need or readiness.');
-
-  return `# Live Conversation Compass
-${lines.join('\n')}`;
-}
-
-function buildAgentInstructions(
-  personality: PersonalityPreset,
-  purpose: SessionPurposePreset,
-  preferenceDirectives: string[] = [],
-  dynamicContext?: DynamicPromptContext
-): string {
-  const emphasisLines = purpose.emphasis.map((item) => `- ${item}`).join('\n');
-  const modeSections = coachingModeOrder.map((mode) => renderModeSection(mode, purpose)).join('\n\n');
-
-  const sections = [
-    `# Role & Objective
-${purpose.roleStatement}`,
-    `# Personality & Tone
-## Personality
-${personality.personality}
-
-## Tone
-${personality.tone}
-
-## Length
-${personality.length}
-
-## Pacing
-${personality.pacing}
-
-## Response Focus
-${personality.responseFocus}`,
-    `# Session Purpose Highlights — ${purpose.label}
-${purpose.focusStatement}
-
-${emphasisLines}`,
-    `# Coaching Mode Compass
-${modeSections}`,
-    buildLiveCompassSection(purpose, dynamicContext)
-  ];
-
-  if (preferenceDirectives.length > 0) {
-    sections.push(`# Session Personalization Cues
-${preferenceDirectives.map((directive) => `- ${directive}`).join('\n')}`);
-  }
-
-  sections.push(coachFoundations);
-
-  return sections.join('\n\n');
-}
-
-type PersonalityId = PersonalityPreset['id'];
-type QuestionnaireQuestionId = 'pace' | 'support' | 'emotion';
-
-const questionnaireQuestionIds: QuestionnaireQuestionId[] = ['pace', 'support', 'emotion'];
-
-const personalityScoreBaseline: Record<PersonalityId, number> = {
-  'warm-professional': 1.5,
-  'direct-challenger': 0.8,
-  'mindful-reflective': 1.5
-};
-
-const personalityQuestionScores: Record<QuestionnaireQuestionId, Record<string, Partial<Record<PersonalityId, number>>>> = {
-  pace: {
-    steady: {
-      'warm-professional': 2,
-      'mindful-reflective': 2
-    },
-    dynamic: {
-      'direct-challenger': 3,
-      'warm-professional': 1
-    },
-    spacious: {
-      'mindful-reflective': 3,
-      'warm-professional': 1
-    }
-  },
-  support: {
-    affirming: {
-      'warm-professional': 3,
-      'mindful-reflective': 1
-    },
-    challenging: {
-      'direct-challenger': 3,
-      'warm-professional': 1
-    },
-    reflective: {
-      'mindful-reflective': 3,
-      'warm-professional': 2
-    }
-  },
-  emotion: {
-    warm: {
-      'warm-professional': 3,
-      'mindful-reflective': 1
-    },
-    balanced: {
-      'direct-challenger': 2,
-      'warm-professional': 2
-    },
-    gentle: {
-      'mindful-reflective': 3,
-      'warm-professional': 1
-    }
-  }
-};
-
-const personalityQuestionRationales: Record<QuestionnaireQuestionId, Record<string, string>> = {
-  pace: {
-    steady: '落ち着いたテンポを望んだため、安心感のあるスタイルを優先しました。',
-    dynamic: 'テンポ良く進めたいニーズから、チャレンジングで推進力のあるスタイルを重視しました。',
-    spacious: '余白を大切にしたい選択から、マインドフルに寄り添うスタイルを強調しました。'
-  },
-  support: {
-    affirming: '励ましと受容を求める回答により、温かくプロフェッショナルな支援を推奨しています。',
-    challenging: '率直さと挑戦を求める回答から、ストレッチをかけるスタイルが合いやすいと判断しました。',
-    reflective: '静かな内省を支えてほしい回答に基づき、丁寧に問いかけるスタイルを選びました。'
-  },
-  emotion: {
-    warm: '感情を適度に共有してほしい回答により、温かい関わりを重視しています。',
-    balanced: '感情表現は控えめが良いとの回答から、クールで明晰なスタイルを選択しました。',
-    gentle: '穏やかな共感を求める回答のため、マインドフルな落ち着きに比重を置きました。'
-  }
-};
-
-const preferenceDirectiveTexts: Record<QuestionnaireQuestionId, Record<string, string>> = {
-  pace: {
-    steady: 'Keep the coaching tempo steady and grounded, leaving reflective pauses for the client.',
-    dynamic: 'Maintain an upbeat, forward-moving cadence that keeps momentum while staying attentive.',
-    spacious: 'Offer a gently paced cadence with generous silence so the client can process internally.'
-  },
-  support: {
-    affirming: 'Lead with affirming reflections before inviting new perspectives or questions.',
-    challenging: 'Provide candid, future-facing challenges that stretch thinking while honouring agency.',
-    reflective: 'Mirror language softly and use open questions that deepen inner reflection.'
-  },
-  emotion: {
-    warm: 'Express calibrated warmth and emotional resonance when acknowledging the client\'s experiences.',
-    balanced: 'Keep emotional expression measured and composed, focusing on clarity and structure.',
-    gentle: 'Offer soothing empathy and name shifts in tone or sensations with a soft presence.'
-  }
-};
-
-const preferenceSummaryTexts: Record<QuestionnaireQuestionId, Record<string, string>> = {
-  pace: {
-    steady: '落ち着いたテンポで進めたい',
-    dynamic: 'テンポよく前進したい',
-    spacious: '余白を重視したい'
-  },
-  support: {
-    affirming: '励ましと受容を重視',
-    challenging: 'ストレッチと挑戦を歓迎',
-    reflective: '静かな内省サポートを希望'
-  },
-  emotion: {
-    warm: '適度な感情共有が安心',
-    balanced: '感情表現は控えめが良い',
-    gentle: '柔らかな共感を求める'
-  }
-};
-
-type QuestionnaireResponses = Partial<Record<QuestionnaireQuestionId, string>>;
-
-type PersonalityRecommendation = {
-  personalityId: PersonalityId;
-  rationale: string[];
-  preferenceDirectives: string[];
-  preferenceSummaries: string[];
-};
-
-function computePersonalityRecommendation(responses: QuestionnaireResponses): PersonalityRecommendation {
-  const aggregateScores: Record<PersonalityId, number> = {} as Record<PersonalityId, number>;
-
-  personalityPresets.forEach((preset) => {
-    aggregateScores[preset.id] = personalityScoreBaseline[preset.id] ?? 0;
-  });
-
-  const rationale: string[] = [];
-  const preferenceDirectives: string[] = [];
-  const preferenceSummaries: string[] = [];
-
-  questionnaireQuestionIds.forEach((questionId) => {
-    const responseValue = responses[questionId];
-    if (!responseValue) {
-      return;
-    }
-    const scoreMap = personalityQuestionScores[questionId]?.[responseValue];
-    if (scoreMap) {
-      Object.entries(scoreMap).forEach(([personalityId, score]) => {
-        const id = personalityId as PersonalityId;
-        aggregateScores[id] += score ?? 0;
-      });
-    }
-    const rationaleText = personalityQuestionRationales[questionId]?.[responseValue];
-    if (rationaleText) {
-      rationale.push(rationaleText);
-    }
-    const directive = preferenceDirectiveTexts[questionId]?.[responseValue];
-    if (directive) {
-      preferenceDirectives.push(directive);
-    }
-    const summary = preferenceSummaryTexts[questionId]?.[responseValue];
-    if (summary) {
-      preferenceSummaries.push(summary);
-    }
-  });
-
-  let bestPersonalityId: PersonalityId = defaultPersonalityId;
-  let bestScore = Number.NEGATIVE_INFINITY;
-
-  personalityPresets.forEach((preset) => {
-    const score = aggregateScores[preset.id];
-    if (score > bestScore) {
-      bestScore = score;
-      bestPersonalityId = preset.id;
-    } else if (score === bestScore && preset.id === defaultPersonalityId) {
-      bestPersonalityId = preset.id;
-    }
-  });
-
-  return {
-    personalityId: bestPersonalityId,
-    rationale,
-    preferenceDirectives,
-    preferenceSummaries
-  };
-}
-
-
-
-
-
 export function setupVoiceAgent() {
+  if (typeof window === 'undefined') return
+  if (window.__voiceAgentInitialized) return
+  window.__voiceAgentInitialized = true
   const connectBtn = document.querySelector<HTMLButtonElement>('#connect-btn')!;
   const disconnectBtn = document.querySelector<HTMLButtonElement>('#disconnect-btn')!;
   const newSessionBtn = document.querySelector<HTMLButtonElement>('#new-session-btn')!;

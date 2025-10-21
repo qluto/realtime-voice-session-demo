@@ -4,17 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Server Commands
-- `npm run dev` - Start Vite development server (frontend on port 5173)
-- `npm run server` - Start Express token generation server (backend on port 3001)
-- `npm run dev:full` - Start both servers concurrently (recommended for development)
-- `npm run build` - Build production version (TypeScript compilation + Vite build)
-- `npm run preview` - Preview production build
+### App Commands
+- `npm run dev` – Start the Next.js development server (frontend + API on http://localhost:3000)
+- `npm run dev:full` – Alias for `npm run dev` (kept for continuity)
+- `npm run build` – Run the full `next build` pipeline (type-check + production bundle)
+- `npm run start` – Serve the optimized production build
+- `npm run lint` – Execute Next.js ESLint checks
 
 ### Environment Setup
-- Requires `.env` file with `OPENAI_API_KEY=sk-proj-...`
-- OpenAI API key must have access to Realtime API
-- Example environment file available at `.env.example`
+- Requires `.env` with `OPENAI_API_KEY=sk-proj-...`
+- Optional overrides: `OPENAI_REALTIME_MODEL`, `NEXT_PUBLIC_TOKEN_ENDPOINT`
+- OpenAI API key must include Realtime API access
 
 ## Architecture Overview
 
@@ -22,27 +22,34 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 
 ### Core Components
 
-**Frontend (Vite + TypeScript):**
-- `src/main.ts` - Main UI setup with coaching session interface
-- `src/voice-agent.ts` - Core voice interaction logic using @openai/agents
-- `src/style.css` - Complete styling with dark/light mode support
+**Frontend (Next.js + TypeScript):**
+- `app/page.tsx` – Initializes the realtime experience and mounts the composed UI
+- `components/realtime/` – Presentational components that render the coaching interface
+- `app/layout.tsx` – Global document shell and metadata
+- `app/globals.css` – Complete styling for the coaching UI
 
-**Backend:**
-- `server.js` - Express token generation server for local development (port 3001)
-- `api/generate-token.ts` - Vercel serverless function for production deployment
-- `vite.config.ts` - Development proxy configuration (proxies /api to localhost:3001)
+**Logic & Orchestration (`lib/`):**
+- `lib/voice-agent/index.ts` – Core voice interaction logic using `@openai/agents`
+- `lib/voice-agent/session-analyzer/` – Adaptive session intelligence helper
+- `lib/voice-agent/utils/` – Timers, usage tracker, prompt presets, logging helpers
+- `lib/voice-agent/prompt-builder.ts` – Dynamic instructions for the agent
+- `lib/voice-agent/personality-recommendation.ts` – Questionnaire scoring and messaging
+
+**Backend (Next.js API routes):**
+- `app/api/generate-token/route.ts` – Secure ephemeral token broker
+- `app/api/health/route.ts` – Development health check endpoint
+- `generate-token.js` – CLI fallback for manual token generation
 
 ### Key Architecture Patterns
 
-**Dual Server Architecture:**
-- Frontend development server (Vite) on port 5173
-- Backend token server (Express) on port 3001
-- Both can be started together with `npm run dev:full`
+**Single Next.js Application:**
+- Next.js serves both the React UI and API routes on the same origin
+- Development server and production build share the same entry points
 
 **Voice Integration:**
-- Uses `@openai/agents` SDK with RealtimeAgent/RealtimeSession
+- Uses `@openai/agents` SDK with `RealtimeAgent` / `RealtimeSession`
 - Ephemeral token authentication (generated server-side for security)
-- Real-time audio processing with WebRTC transport
+- Real-time audio transport via WebRTC
 
 **Coaching Session Structure:**
 - 10-minute structured sessions: Opening → Reflection → Insights → Integration → Closing
@@ -50,17 +57,16 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - Real-time usage/cost tracking with detailed token consumption analytics
 
 **State Management:**
-- Session state tracked in `voice-agent.ts` (connection status, timers, usage stats)
+- Interactive state managed in `lib/voice-agent/index.ts` (connection status, timers, usage stats)
 - Conversation logging with timestamps and role identification
 - Cost calculation for different OpenAI pricing models
 
 ### Important Technical Details
 
 **Token Generation:**
-- Ephemeral tokens generated via `/api/generate-token` endpoint
-- Tokens start with "ek_" and are temporary/secure
-- Local development: Express server (server.js) on port 3001
-- Production (Vercel): Serverless function (api/generate-token.ts)
+- Ephemeral tokens generated via the Next.js API route at `/api/generate-token`
+- Tokens start with `ek_` and expire quickly; never expose the main API key to the browser
+- CLI fallback `generate-token.js` remains available for manual testing
 
 **Usage Analytics:**
 - Real-time token consumption tracking (input/output/cached/audio/text) via console logs
@@ -68,22 +74,22 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - Console logging every 10 seconds during active sessions
 
 **TypeScript Configuration:**
-- Strict mode enabled with comprehensive linting rules
-- ES2022 target with bundler module resolution
-- Vite client types included for development
+- Strict mode enabled with the Next.js TypeScript plugin
+- `moduleResolution: "Bundler"` and explicit `.ts`/`.tsx` imports per repository style
+- ESLint powered by `eslint-config-next`
 
 ### Development Workflow
 
 **Local Development:**
-1. Set up `.env` file with `OPENAI_API_KEY=sk-proj-...`
-2. Run `npm run dev:full` to start both servers (Express on port 3001 + Vite on port 5173)
-3. Frontend automatically proxies `/api` requests to Express server
-4. All voice interactions happen through ephemeral tokens (never expose main API key to client)
+1. Create `.env` with `OPENAI_API_KEY=sk-proj-...`
+2. Run `npm run dev`
+3. Visit http://localhost:3000 and allow microphone access when prompted
+4. The UI and token broker share the same origin (`/api/generate-token`)
 
-**Vercel Deployment:**
-1. Set `OPENAI_API_KEY` environment variable in Vercel project settings
-2. Deploy via `vercel` command or Git integration
-3. `api/generate-token.ts` automatically becomes a serverless function
-4. Frontend is served as static files from `dist` directory
+**Production / Vercel Deployment:**
+1. Configure `OPENAI_API_KEY` (and optional overrides) in Vercel environment settings
+2. Deploy via `vercel` CLI or Git integration – the Next.js build produces `.next/`
+3. API routes deploy automatically alongside the UI under `/api/*`
+4. Confirm the deployment by starting a session and monitoring the console for errors
 
 The application requires microphone permissions and modern browser support for WebRTC functionality.
