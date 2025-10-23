@@ -21,23 +21,27 @@ export function ConversationPanel() {
           <h3>🎯 セッションの始め方</h3>
           <p>「コーチングセッション開始」を押してマイクアクセスを許可すると、AIコーチとの音声チャットがスタートします。</p>
           <p>ヘッダーのハンバーガーメニューから「Prompt personalization」を開いて質問に回答すると、あなたの個性に合わせたコーチングスタイルが自動でセットされます。</p>
-          <p>下記の4つのモードを行き来しながら、コーチングセッションを進めていきます。</p>
+          <p>下記の5つのフェーズを順にたどりながら、コーチングセッションを進めていきます。</p>
           <div className="instructions-list">
             <div className="instruction-step">
-              <span className="step-label">Reflective</span>
-              <span className="step-copy">感情と価値をゆっくり言語化</span>
+              <span className="step-label">Opening</span>
+              <span className="step-copy">信頼を築き意図とテーマを合意する</span>
             </div>
             <div className="instruction-step">
-              <span className="step-label">Discovery</span>
-              <span className="step-copy">ゴールと現状・選択肢を整理</span>
+              <span className="step-label">Reflection</span>
+              <span className="step-copy">感情と経験を丁寧に振り返る</span>
             </div>
             <div className="instruction-step">
-              <span className="step-label">Cognitive</span>
-              <span className="step-copy">視点の転換で思考を解きほぐす</span>
+              <span className="step-label">Insight</span>
+              <span className="step-copy">洞察を深め意味づけをクリアにする</span>
             </div>
             <div className="instruction-step">
-              <span className="step-label">Actionable</span>
-              <span className="step-copy">次の一歩を合意し支援を整える</span>
+              <span className="step-label">Integration</span>
+              <span className="step-copy">得た学びを行動とリソースに結びつける</span>
+            </div>
+            <div className="instruction-step">
+              <span className="step-label">Closing</span>
+              <span className="step-copy">収穫を振り返り次に向けた約束を整える</span>
             </div>
           </div>
         </div>

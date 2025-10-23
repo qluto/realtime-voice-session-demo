@@ -1,24 +1,6 @@
 import { RealtimeSession } from '@openai/agents/realtime'
-import {
-  ANALYSIS_COOLDOWN,
-  MAX_TRANSCRIPTS,
-  MODE_LABELS,
-  MODE_ORDER,
-  SUPPRESSION_WINDOW,
-  type ModeKey
-} from './constants.ts'
-import { buildAnalysisPrompt } from './prompt-builder.ts'
 
-export type CoachingAnalysis = {
-  summary: string
-  rationale: string
-  coachFocus: string
-  mode: ModeKey
-  confidence: Record<ModeKey, number>
-  questions: string[]
-  summaryReady: boolean
-  summaryReason: string
-}
+export type PhaseKey = 'opening' | 'reflection' | 'insight' | 'integration' | 'closing'
 
 type TranscriptEntry = {
   role: 'client' | 'coach'
@@ -30,45 +12,56 @@ type SessionAnalyzerOptions = {
   session: RealtimeSession
   controls: {
     panel: HTMLElement | null
-    modeFills: Record<ModeKey, HTMLElement | null>
-    modeScores: Record<ModeKey, HTMLElement | null>
-    currentMode: HTMLElement | null
+    phaseFills: Record<PhaseKey, HTMLElement | null>
+    phaseScores: Record<PhaseKey, HTMLElement | null>
+    currentPhase: HTMLElement | null
     progressNotes: HTMLElement | null
     closureContainer: HTMLElement | null
     closureMessage: HTMLElement | null
   }
   initialAutoSummary?: boolean
   onRequestSummary: () => Promise<void> | void
-  onAnalysisUpdate?: (analysis: CoachingAnalysis) => void
 }
+
+const PHASE_LABELS: Record<PhaseKey, string> = {
+  opening: 'オープニング',
+  reflection: '深い振り返り',
+  insight: '洞察の統合',
+  integration: '前進的統合',
+  closing: 'クロージング'
+}
+
+const PHASE_ORDER: PhaseKey[] = ['opening', 'reflection', 'insight', 'integration', 'closing']
+
+const SCORE_REQUEST_COOLDOWN = 15_000
+const MAX_TRANSCRIPTS = 40
+const SUPPRESSION_WINDOW = 120_000
 
 export class SessionAnalyzer {
   private session: RealtimeSession
   private controls: SessionAnalyzerOptions['controls']
   private onRequestSummary: () => Promise<void> | void
-  private onAnalysisUpdate?: (analysis: CoachingAnalysis) => void
   private transcripts: TranscriptEntry[] = []
   private processedEventIds = new Set<string>()
-  private modeScores: Record<ModeKey, number> = {
-    reflective: 0,
-    discovery: 0,
-    actionable: 0,
-    cognitive: 0
+  private phaseScores: Record<PhaseKey, number> = {
+    opening: 0,
+    reflection: 0,
+    insight: 0,
+    integration: 0,
+    closing: 0
   }
   private autoSummaryEnabled: boolean
-  private pendingAnalysis = false
-  private pendingAnalysisEventId: string | null = null
-  private lastAnalysisRequestedAt = 0
+  private pendingScore = false
+  private pendingScoreEventId: string | null = null
+  private lastScoreRequestedAt = 0
   private closureSuggested = false
   private summarySuppressedUntil = 0
   private disposed = false
-  private lastAnalysisSignature: string | null = null
 
   constructor(options: SessionAnalyzerOptions) {
     this.session = options.session
     this.controls = options.controls
     this.onRequestSummary = options.onRequestSummary
-    this.onAnalysisUpdate = options.onAnalysisUpdate
     this.autoSummaryEnabled = options.initialAutoSummary ?? true
 
     this.resetUi()
@@ -155,10 +148,9 @@ export class SessionAnalyzer {
     this.disposed = true
     this.transcripts = []
     this.processedEventIds.clear()
-    this.pendingAnalysis = false
-    this.pendingAnalysisEventId = null
-    this.lastAnalysisSignature = null
-    // keep current UI state visible until a new session begins
+    this.pendingScore = false
+    this.pendingScoreEventId = null
+    // retain UI state until next session
   }
 
   private handleSessionCreated() {
@@ -175,32 +167,32 @@ export class SessionAnalyzer {
   private resetAnalyzerState() {
     this.transcripts = []
     this.processedEventIds.clear()
-    this.pendingAnalysis = false
-    this.pendingAnalysisEventId = null
-    this.lastAnalysisRequestedAt = 0
+    this.pendingScore = false
+    this.pendingScoreEventId = null
+    this.lastScoreRequestedAt = 0
     this.closureSuggested = false
     this.summarySuppressedUntil = 0
-    this.lastAnalysisSignature = null
     this.resetScores()
   }
 
   private resetScores() {
-    this.modeScores = {
-      reflective: 0,
-      discovery: 0,
-      actionable: 0,
-      cognitive: 0
+    this.phaseScores = {
+      opening: 0,
+      reflection: 0,
+      insight: 0,
+      integration: 0,
+      closing: 0
     }
 
-    MODE_ORDER.forEach((mode) => {
-      const fill = this.controls.modeFills[mode]
-      const score = this.controls.modeScores[mode]
+    PHASE_ORDER.forEach((phase) => {
+      const fill = this.controls.phaseFills[phase]
+      const score = this.controls.phaseScores[phase]
       if (fill) fill.style.width = '0%'
       if (score) score.textContent = '0%'
     })
 
-    if (this.controls.currentMode) {
-      this.controls.currentMode.textContent = '現在のモード: 解析中'
+    if (this.controls.currentPhase) {
+      this.controls.currentPhase.textContent = '現在のフェーズ: オープニングを探索中'
     }
   }
 
@@ -228,29 +220,29 @@ export class SessionAnalyzer {
       this.transcripts.splice(0, this.transcripts.length - MAX_TRANSCRIPTS)
     }
 
-    this.scheduleAnalysis()
+    this.scheduleProgressEvaluation()
   }
 
-  private scheduleAnalysis() {
-    if (this.pendingAnalysis) return
+  private scheduleProgressEvaluation() {
+    if (this.pendingScore) return
     const now = Date.now()
-    if (now - this.lastAnalysisRequestedAt < ANALYSIS_COOLDOWN) return
+    if (now - this.lastScoreRequestedAt < SCORE_REQUEST_COOLDOWN) return
     if (this.transcripts.length < 4) return
 
-    this.pendingAnalysis = true
-    this.lastAnalysisRequestedAt = now
-    this.pendingAnalysisEventId = `analysis_${Date.now()}`
+    this.pendingScore = true
+    this.lastScoreRequestedAt = now
+    this.pendingScoreEventId = `progress_${Date.now()}`
 
     const transcriptSnippet = this.buildTranscriptSnippet()
-    const prompt = buildAnalysisPrompt(transcriptSnippet)
+    const prompt = this.buildProgressPrompt(transcriptSnippet)
 
     try {
       this.session.transport.sendEvent({
-        event_id: this.pendingAnalysisEventId,
+        event_id: this.pendingScoreEventId,
         type: 'response.create',
         response: {
           conversation: 'none',
-          metadata: { purpose: 'coaching-analysis' },
+          metadata: { purpose: 'progress-score' },
           output_modalities: ['text'],
           input: [
             {
@@ -267,9 +259,9 @@ export class SessionAnalyzer {
         }
       })
     } catch (error) {
-      console.error('Failed to request coaching analysis:', error)
-      this.pendingAnalysis = false
-      this.pendingAnalysisEventId = null
+      console.error('Failed to request progress score:', error)
+      this.pendingScore = false
+      this.pendingScoreEventId = null
     }
   }
 
@@ -278,12 +270,12 @@ export class SessionAnalyzer {
     if (!response) return
 
     const purpose = response.metadata?.purpose || response.metadata?.Purpose
-    if (purpose !== 'coaching-analysis' && purpose !== 'closure-readiness') {
+    if (purpose !== 'progress-score' && purpose !== 'closure-readiness') {
       return
     }
 
-    this.pendingAnalysis = false
-    this.pendingAnalysisEventId = null
+    this.pendingScore = false
+    this.pendingScoreEventId = null
 
     const text = this.extractTextFromResponse(response)
     if (!text) return
@@ -291,17 +283,17 @@ export class SessionAnalyzer {
     const parsed = this.safeParseJson(text)
     if (!parsed) return
 
-    this.applyAnalysisResult(parsed)
+    this.applyProgressResult(parsed)
   }
 
-  private applyAnalysisResult(parsed: any) {
-    const confidence = this.normalizeConfidence(parsed)
-    this.modeScores = confidence
+  private applyProgressResult(parsed: any) {
+    const scores = this.normalizeScores(parsed)
+    this.phaseScores = scores
 
-    MODE_ORDER.forEach((mode) => {
-      const percentage = Math.round((confidence[mode] ?? 0) * 100)
-      const fill = this.controls.modeFills[mode]
-      const scoreEl = this.controls.modeScores[mode]
+    PHASE_ORDER.forEach((phase) => {
+      const percentage = Math.round((scores[phase] ?? 0) * 100)
+      const fill = this.controls.phaseFills[phase]
+      const scoreEl = this.controls.phaseScores[phase]
       if (fill) {
         const clamped = Math.max(0, Math.min(100, percentage))
         fill.style.width = `${clamped}%`
@@ -311,89 +303,49 @@ export class SessionAnalyzer {
       }
     })
 
-    const analysis = this.buildAnalysisPayload(parsed, confidence)
-    if (!analysis) {
-      return
+    const currentPhase = this.resolveCurrentPhase(parsed)
+    if (this.controls.currentPhase && currentPhase) {
+      this.controls.currentPhase.textContent = `現在のフェーズ: ${currentPhase}`
     }
 
-    if (this.controls.currentMode) {
-      const label = MODE_LABELS[analysis.mode]
-      this.controls.currentMode.textContent = `現在のモード: ${label}`
-    }
-
+    const reason = this.resolveSummaryReason(parsed)
     if (this.controls.progressNotes) {
-      const parts = [analysis.summary, analysis.rationale, analysis.coachFocus].filter((value) => Boolean(value && value.trim()))
-      this.controls.progressNotes.textContent = parts.join('\n')
+      this.controls.progressNotes.textContent = reason
     }
 
-    if (analysis.summaryReady && this.autoSummaryEnabled) {
-      this.maybeShowClosureSuggestion(analysis.summaryReason)
-    }
-
-    const signature = JSON.stringify({
-      mode: analysis.mode,
-      summary: analysis.summary,
-      rationale: analysis.rationale,
-      focus: analysis.coachFocus,
-      questions: analysis.questions
-    })
-
-    if (this.lastAnalysisSignature !== signature) {
-      this.lastAnalysisSignature = signature
-      this.onAnalysisUpdate?.(analysis)
+    const summaryReady = this.isSummaryReady(parsed, scores)
+    if (summaryReady && this.autoSummaryEnabled) {
+      this.maybeShowClosureSuggestion(reason)
     }
   }
 
-  private buildAnalysisPayload(parsed: any, confidence: Record<ModeKey, number>): CoachingAnalysis | null {
-    const modeValue = this.extractMode(parsed)
-    if (!modeValue) return null
-
-    const summary = this.ensureString(parsed.summary || parsed.conversation_summary || parsed.recaps)
-    const rationale = this.ensureString(parsed.rationale || parsed.reason || parsed.analysis)
-    const coachFocus = this.ensureString(parsed.coach_focus || parsed.next_focus || parsed.focus)
-    const summaryReady = this.extractBoolean(parsed.summary_ready ?? parsed.ready_for_summary ?? parsed.summaryReady ?? parsed.readyForSummary)
-    const summaryReason = this.ensureString(
-      parsed.summary_reason ||
-        parsed.summaryReason ||
-        parsed.closure_reason ||
-        parsed.closureReason ||
-        parsed.closure_note
-    )
-
-    const questionsSource = Array.isArray(parsed.questions)
-      ? parsed.questions
-      : Array.isArray(parsed.coach_message?.questions)
-        ? parsed.coach_message.questions
-        : []
-    const questionsRaw = questionsSource as any[]
-    const questions = questionsRaw
-      .map((value: any) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value: string) => Boolean(value))
-
-    return {
-      summary,
-      rationale,
-      coachFocus,
-      mode: modeValue,
-      confidence,
-      questions,
-      summaryReady,
-      summaryReason: summaryReason || (summaryReady ? '主要テーマが収束しつつあります。' : '')
+  private resolveCurrentPhase(parsed: any): string {
+    const nextPhase = parsed.current_phase || parsed.next_phase || parsed.currentPhase || parsed.nextPhase
+    if (typeof nextPhase === 'string') {
+      const key = this.matchPhaseKey(nextPhase)
+      if (key) return PHASE_LABELS[key]
+      return nextPhase
     }
+
+    const highest = [...PHASE_ORDER].sort((a, b) => (this.phaseScores[b] ?? 0) - (this.phaseScores[a] ?? 0))[0]
+    return PHASE_LABELS[highest] ?? '進行中'
   }
 
-  private extractMode(parsed: any): ModeKey | null {
-    const raw = parsed.mode || parsed.current_mode || parsed.mode_choice
-    if (typeof raw === 'string') {
-      const normalized = raw.toLowerCase().trim()
-      if (normalized.startsWith('reflect')) return 'reflective'
-      if (normalized.startsWith('discov')) return 'discovery'
-      if (normalized.startsWith('action')) return 'actionable'
-      if (normalized.startsWith('cogn')) return 'cognitive'
+  private resolveSummaryReason(parsed: any): string {
+    const reason = parsed.reason || parsed.summary_reason || parsed.notes || parsed.analysis
+    if (typeof reason === 'string' && reason.trim()) {
+      return reason.trim()
     }
+    return '進行状況を分析しています。十分なデータが集まるとまとめ提案が表示されます。'
+  }
 
-    const highest = [...MODE_ORDER].sort((a, b) => (this.modeScores[b] ?? 0) - (this.modeScores[a] ?? 0))[0]
-    return highest ?? null
+  private isSummaryReady(parsed: any, scores: Record<PhaseKey, number>): boolean {
+    const parsedReady = parsed.summary_ready ?? parsed.summaryReady ?? parsed.ready_for_summary ?? parsed.readyForSummary
+    if (typeof parsedReady === 'boolean') return parsedReady
+
+    const closingScore = scores.closing ?? 0
+    const average = PHASE_ORDER.reduce((acc, key) => acc + (scores[key] ?? 0), 0) / PHASE_ORDER.length
+    return closingScore >= 0.65 && average >= 0.6
   }
 
   private maybeShowClosureSuggestion(reason: string) {
@@ -405,7 +357,7 @@ export class SessionAnalyzer {
     const message = this.controls.closureMessage
     if (!container || !message) return
 
-    const prompt = reason && reason.trim() ? reason.trim() : 'セッションをまとめる準備が整いつつあります。'
+    const prompt = reason && reason.trim() ? reason.trim() : '主要フェーズを概ね完了しました。'
     message.textContent = `${prompt}\nセッションをまとめに移行しますか？`
     container.style.display = 'block'
     this.closureSuggested = true
@@ -426,8 +378,8 @@ export class SessionAnalyzer {
         response: {
           conversation: 'none',
           metadata: { purpose: 'summary-dismissed' },
-          output_modalities: ['audio'],
-          instructions: 'The client would like to continue exploring before summarizing. Ask one concise, powerful question that deepens reflection while maintaining the session language.'
+          output_modalities: ['audio', 'text'],
+          instructions: 'The client would like to continue exploring before summarizing. Ask a concise, powerful question that deepens reflection while maintaining the session language.'
         }
       })
     } catch (error) {
@@ -440,6 +392,10 @@ export class SessionAnalyzer {
     return recent
       .map((entry) => `${entry.role === 'client' ? 'Client' : 'Coach'}: ${entry.text}`)
       .join('\n')
+  }
+
+  private buildProgressPrompt(transcript: string): string {
+    return `以下はコーチ("Coach")とクライアント("Client")の週次振り返りセッションの抜粋です。ICFコアコンピテンシーに基づき、各フェーズの進捗を0から1で評価してください。JSONのみを返し、フォーマットは次のとおりです:\n{\n  "scores": {\n    "opening": number,\n    "reflection": number,\n    "insight": number,\n    "integration": number,\n    "closing": number\n  },\n  "current_phase": string,\n  "summary_ready": boolean,\n  "reason": string\n}\nスコアは0から1の範囲で小数点2桁までにし、reasonは日本語で簡潔に記述してください。\n\nTranscript:\n${transcript}`
   }
 
   private extractTextFromItem(item: any): string {
@@ -503,31 +459,44 @@ export class SessionAnalyzer {
     return combined || null
   }
 
-  private normalizeConfidence(parsed: any): Record<ModeKey, number> {
-    const source = parsed.mode_confidence || parsed.confidence || parsed.scores || parsed
-    const result: Record<ModeKey, number> = {
-      reflective: 0,
-      discovery: 0,
-      actionable: 0,
-      cognitive: 0
-    }
+  private normalizeScores(parsed: any): Record<PhaseKey, number> {
+    const scores: Partial<Record<PhaseKey, number>> = {}
+    const source = parsed.scores || parsed.progress || parsed
 
-    MODE_ORDER.forEach((mode) => {
-      const raw = source?.[mode]
+    PHASE_ORDER.forEach((phase) => {
+      const raw = source?.[phase]
       const value = typeof raw === 'number' ? raw : parseFloat(raw)
-      if (!Number.isNaN(value) && Number.isFinite(value)) {
-        result[mode] = Math.max(0, Math.min(1, value))
+      if (!Number.isNaN(value)) {
+        scores[phase] = Math.max(0, Math.min(1, value))
+      } else {
+        scores[phase] = 0
       }
     })
 
-    return result
+    return {
+      opening: scores.opening ?? 0,
+      reflection: scores.reflection ?? 0,
+      insight: scores.insight ?? 0,
+      integration: scores.integration ?? 0,
+      closing: scores.closing ?? 0
+    }
+  }
+
+  private matchPhaseKey(value: string): PhaseKey | null {
+    const normalized = value.toLowerCase().replace(/[^a-z]/g, '')
+    if (normalized.includes('opening')) return 'opening'
+    if (normalized.includes('reflection')) return 'reflection'
+    if (normalized.includes('insight')) return 'insight'
+    if (normalized.includes('integration')) return 'integration'
+    if (normalized.includes('closing')) return 'closing'
+    return null
   }
 
   private safeParseJson(text: string): any | null {
     try {
       return JSON.parse(text)
     } catch (error) {
-      console.warn('Failed to parse analysis JSON:', text, error)
+      console.warn('Failed to parse progress JSON:', text, error)
       return null
     }
   }
@@ -539,21 +508,6 @@ export class SessionAnalyzer {
     if (typeof event.item_id === 'string') return event.item_id
     if (event.response?.id) return `response_${event.response.id}`
     return null
-  }
-
-  private ensureString(value: any): string {
-    if (typeof value === 'string') return value.trim()
-    return ''
-  }
-
-  private extractBoolean(value: any): boolean {
-    if (typeof value === 'boolean') return value
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase()
-      if (normalized === 'true') return true
-      if (normalized === 'false') return false
-    }
-    return false
   }
 
   private resetUi() {
