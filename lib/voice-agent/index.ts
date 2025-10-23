@@ -22,8 +22,7 @@ import {
   startSpeakingAnimation,
   stopSpeakingAnimation
 } from './utils/speaking-animation'
-import { SessionAnalyzer, type CoachingAnalysis } from './session-analyzer'
-import { type ModeKey } from './session-analyzer/constants.ts'
+import { SessionAnalyzer, type PhaseKey } from './session-analyzer/index.ts'
 import {
   getPersonalityPreset,
   getSessionPurposePreset,
@@ -77,7 +76,7 @@ export function setupVoiceAgent() {
   const configOpenBtn = document.querySelector<HTMLButtonElement>('#config-open-btn')
   const configCloseBtn = document.querySelector<HTMLButtonElement>('#config-close-btn')
   const progressPanel = document.querySelector<HTMLElement>('#progress-panel')
-  const currentModeEl = document.querySelector<HTMLElement>('#current-mode')
+  const currentPhaseEl = document.querySelector<HTMLElement>('#current-phase')
   const progressNotesEl = document.querySelector<HTMLElement>('#progress-notes')
   const closureSuggestionEl = document.querySelector<HTMLElement>('#closure-suggestion')
   const closureMessageEl = document.querySelector<HTMLElement>('#closure-message')
@@ -115,7 +114,7 @@ export function setupVoiceAgent() {
 
   type Modality = 'voice' | 'text';
   let currentModality: Modality = 'voice';
-  const suppressedPurposeSet = new Set(['coaching-analysis', 'closure-readiness']);
+  const suppressedPurposeSet = new Set(['progress-score', 'closure-readiness']);
   const suppressedResponseIds = new Set<string>();
   const suppressedItemIds = new Set<string>();
   const pendingLocalUserMessages: string[] = [];
@@ -270,30 +269,20 @@ export function setupVoiceAgent() {
     }
   };
 
-  const handleAnalysisUpdate = (analysis: CoachingAnalysis) => {
-    lastDynamicContext = {
-      mode: analysis.mode,
-      summary: analysis.summary,
-      rationale: analysis.rationale,
-      coachFocus: analysis.coachFocus,
-      questions: analysis.questions,
-      confidence: analysis.confidence
-    };
-    syncSessionInstructions(lastDynamicContext);
-  };
-
-  const modeFillElements: Record<ModeKey, HTMLElement | null> = {
-    reflective: document.querySelector<HTMLElement>('[data-mode-fill="reflective"]'),
-    discovery: document.querySelector<HTMLElement>('[data-mode-fill="discovery"]'),
-    actionable: document.querySelector<HTMLElement>('[data-mode-fill="actionable"]'),
-    cognitive: document.querySelector<HTMLElement>('[data-mode-fill="cognitive"]')
+  const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
+    opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
+    reflection: document.querySelector<HTMLElement>('[data-phase-fill="reflection"]'),
+    insight: document.querySelector<HTMLElement>('[data-phase-fill="insight"]'),
+    integration: document.querySelector<HTMLElement>('[data-phase-fill="integration"]'),
+    closing: document.querySelector<HTMLElement>('[data-phase-fill="closing"]')
   }
 
-  const modeScoreElements: Record<ModeKey, HTMLElement | null> = {
-    reflective: document.querySelector<HTMLElement>('[data-mode-score="reflective"]'),
-    discovery: document.querySelector<HTMLElement>('[data-mode-score="discovery"]'),
-    actionable: document.querySelector<HTMLElement>('[data-mode-score="actionable"]'),
-    cognitive: document.querySelector<HTMLElement>('[data-mode-score="cognitive"]')
+  const phaseScoreElements: Record<PhaseKey, HTMLElement | null> = {
+    opening: document.querySelector<HTMLElement>('[data-phase-score="opening"]'),
+    reflection: document.querySelector<HTMLElement>('[data-phase-score="reflection"]'),
+    insight: document.querySelector<HTMLElement>('[data-phase-score="insight"]'),
+    integration: document.querySelector<HTMLElement>('[data-phase-score="integration"]'),
+    closing: document.querySelector<HTMLElement>('[data-phase-score="closing"]')
   }
 
   const storageAvailable = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -1017,16 +1006,15 @@ export function setupVoiceAgent() {
         session,
         controls: {
           panel: progressPanel || null,
-          modeFills: modeFillElements,
-          modeScores: modeScoreElements,
-          currentMode: currentModeEl || null,
+          phaseFills: phaseFillElements,
+          phaseScores: phaseScoreElements,
+          currentPhase: currentPhaseEl || null,
           progressNotes: progressNotesEl || null,
           closureContainer: closureSuggestionEl || null,
           closureMessage: closureMessageEl || null
         },
         initialAutoSummary: autoSummaryToggle?.checked ?? true,
-        onRequestSummary: () => requestSessionSummary(true),
-        onAnalysisUpdate: handleAnalysisUpdate
+        onRequestSummary: () => requestSessionSummary(true)
       });
 
       if (autoSummaryToggle) {
