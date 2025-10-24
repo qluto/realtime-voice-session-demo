@@ -21,6 +21,7 @@ type SessionAnalyzerOptions = {
   }
   initialAutoSummary?: boolean
   onRequestSummary: () => Promise<void> | void
+  getOutputModalities: () => ('audio' | 'text')[]
 }
 
 const PHASE_LABELS: Record<PhaseKey, string> = {
@@ -40,6 +41,7 @@ export class SessionAnalyzer {
   private session: RealtimeSession
   private controls: SessionAnalyzerOptions['controls']
   private onRequestSummary: () => Promise<void> | void
+  private readOutputModalities: () => ('audio' | 'text')[]
   private transcripts: TranscriptEntry[] = []
   private processedEventIds = new Set<string>()
   private phaseScores: Record<PhaseKey, number> = {
@@ -63,6 +65,7 @@ export class SessionAnalyzer {
     this.session = options.session
     this.controls = options.controls
     this.onRequestSummary = options.onRequestSummary
+    this.readOutputModalities = options.getOutputModalities
     this.autoSummaryEnabled = options.initialAutoSummary ?? true
 
     this.resetUi()
@@ -392,12 +395,13 @@ export class SessionAnalyzer {
     this.awaitingSummaryConsent = true
     try {
       const instructions = this.buildSummaryConsentPrompt(reason)
+      const outputModalities = this.determineOutputModalities(true)
       this.session.transport.sendEvent({
         type: 'response.create',
         response: {
           conversation: 'none',
           metadata: { purpose: 'summary-consent' },
-          output_modalities: ['audio', 'text'],
+          output_modalities: outputModalities,
           instructions
         }
       })
@@ -466,13 +470,14 @@ export class SessionAnalyzer {
   }
 
   private sendContinuationPrompt() {
+    const outputModalities = this.determineOutputModalities(true)
     try {
       this.session.transport.sendEvent({
         type: 'response.create',
         response: {
           conversation: 'none',
           metadata: { purpose: 'summary-dismissed' },
-          output_modalities: ['audio', 'text'],
+          output_modalities: outputModalities,
           instructions: 'The client would like to continue exploring before summarizing. Ask a concise, powerful question that deepens reflection while maintaining the session language.'
         }
       })
@@ -523,6 +528,24 @@ export class SessionAnalyzer {
 
   private buildProgressPrompt(transcript: string): string {
     return `以下はコーチ("Coach")とクライアント("Client")のコーチングセッションの抜粋です。GROWモデル（Goal→Reality→Options→Will）に基づき、各フェーズの進捗を0から1で評価してください。JSONのみを返し、フォーマットは次のとおりです:\n{\n  "scores": {\n    "goal": number,\n    "reality": number,\n    "options": number,\n    "will": number\n  },\n  "current_phase": string,\n  "summary_ready": boolean,\n  "reason": string\n}\n\n各フェーズの評価基準:\n- goal: 目標や望む成果が明確化されているか\n- reality: 現状の把握、課題や状況の理解が深まっているか\n- options: 選択肢や可能性が十分に探索されているか\n- will: 具体的な行動やコミットメントが設定されているか\n\nスコアは0から1の範囲で小数点2桁までにし、reasonは日本語で簡潔に記述してください。\n\nTranscript:\n${transcript}`
+  }
+
+  private determineOutputModalities(preferAudio: boolean): ('audio' | 'text')[] {
+    const provided = this.readOutputModalities?.() ?? []
+    const sanitized = Array.from(new Set(provided)).filter((value): value is 'audio' | 'text' => value === 'audio' || value === 'text')
+    if (!sanitized.length) {
+      return ['text']
+    }
+    if (!preferAudio) {
+      return sanitized
+    }
+    if (!sanitized.includes('audio')) {
+      return sanitized.includes('text') ? sanitized : ['text']
+    }
+    if (!sanitized.includes('text')) {
+      return [...sanitized, 'text']
+    }
+    return sanitized
   }
 
   private extractTextFromItem(item: any): string {

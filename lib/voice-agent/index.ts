@@ -1077,6 +1077,7 @@ export function setupVoiceAgent() {
           closureContainer: closureSuggestionEl || null,
           closureMessage: closureMessageEl || null
         },
+        getOutputModalities: getDesiredOutputModalities,
         initialAutoSummary: autoSummaryToggle?.checked ?? true,
         onRequestSummary: () => requestSessionSummary(true)
       });
