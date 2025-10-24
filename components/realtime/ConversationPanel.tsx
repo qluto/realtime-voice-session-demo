@@ -1,4 +1,37 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
 export function ConversationPanel() {
+  const [showInstructions, setShowInstructions] = useState(true)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 720px)')
+    const syncToViewport = (event?: MediaQueryListEvent) => {
+      const isNarrow = typeof event === 'undefined' ? mq.matches : event.matches
+      setShowInstructions(!isNarrow)
+    }
+    const handleChange = (event: MediaQueryListEvent) => syncToViewport(event)
+    syncToViewport()
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', handleChange)
+    } else if (typeof mq.addListener === 'function') {
+      mq.addListener(handleChange)
+    }
+    return () => {
+      if (typeof mq.removeEventListener === 'function') {
+        mq.removeEventListener('change', handleChange)
+      } else if (typeof mq.removeListener === 'function') {
+        mq.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  const handleInstructionsToggle = () => {
+    setShowInstructions((prev) => !prev)
+  }
+
   return (
     <section className="panel conversation-panel">
       <div className="panel-header">
@@ -7,48 +40,56 @@ export function ConversationPanel() {
           <h2 className="panel-title">Coaching conversation</h2>
         </div>
         <div className="panel-actions">
-          <button id="copy-transcript-btn" type="button" className="icon-pill" style={{ display: 'none' }}>
+          <button id="copy-transcript-btn" type="button" className="icon-pill">
             <span aria-hidden="true">📋</span>
             <span>ログをコピー</span>
           </button>
-          <div id="summary-controls" className="summary-controls" style={{ display: 'none' }}>
+          <div id="summary-controls" className="summary-controls">
             <button id="request-summary-btn" type="button" className="pill-button">まとめをリクエスト</button>
           </div>
         </div>
       </div>
       <div className="panel-body">
-        <div id="instructions" className="instructions-card">
-          <h3>🎯 セッションの始め方</h3>
-          <p>「コーチングセッション開始」を押してマイクアクセスを許可すると、AIコーチとの音声チャットがスタートします。</p>
-          <p>ヘッダーのハンバーガーメニューから「Prompt personalization」を開いて質問に回答すると、あなたの個性に合わせたコーチングスタイルが自動でセットされます。</p>
-          <p>下記の5つのフェーズを順にたどりながら、コーチングセッションを進めていきます。</p>
-          <div className="instructions-list">
-            <div className="instruction-step">
-              <span className="step-label">Opening</span>
-              <span className="step-copy">信頼を築き意図とテーマを合意する</span>
-            </div>
-            <div className="instruction-step">
-              <span className="step-label">Reflection</span>
-              <span className="step-copy">感情と経験を丁寧に振り返る</span>
-            </div>
-            <div className="instruction-step">
-              <span className="step-label">Insight</span>
-              <span className="step-copy">洞察を深め意味づけをクリアにする</span>
-            </div>
-            <div className="instruction-step">
-              <span className="step-label">Integration</span>
-              <span className="step-copy">得た学びを行動とリソースに結びつける</span>
-            </div>
-            <div className="instruction-step">
-              <span className="step-label">Closing</span>
-              <span className="step-copy">収穫を振り返り次に向けた約束を整える</span>
+        <div className="instructions-toggle">
+          <button
+            type="button"
+            className="instructions-toggle-button"
+            onClick={handleInstructionsToggle}
+            aria-expanded={showInstructions}
+          >
+            セッションガイドを{showInstructions ? '閉じる' : '開く'}
+          </button>
+        </div>
+        {showInstructions && (
+          <div id="instructions" className="instructions-card">
+            <h3>🎯 セッションの始め方</h3>
+            <p>「コーチングセッション開始」を押してマイクアクセスを許可すると、AIコーチとの音声チャットがスタートします。</p>
+            <p>ヘッダーのハンバーガーメニューから「Prompt personalization」を開いて質問に回答すると、あなたの個性に合わせたコーチングスタイルが自動でセットされます。</p>
+            <p>下記のGROWモデルの4フェーズを順にたどりながら、コーチングセッションを進めていきます。</p>
+            <div className="instructions-list">
+              <div className="instruction-step">
+                <span className="step-label">Goal</span>
+                <span className="step-copy">望む状態や今セッションで叶えたいことを言語化する</span>
+              </div>
+              <div className="instruction-step">
+                <span className="step-label">Reality</span>
+                <span className="step-copy">現在の状況や感情を整理し、どこに立っているかを把握する</span>
+              </div>
+              <div className="instruction-step">
+                <span className="step-label">Options</span>
+                <span className="step-copy">可能な選択肢やアプローチを広げ、アイデアを発散する</span>
+              </div>
+              <div className="instruction-step">
+                <span className="step-label">Will</span>
+                <span className="step-copy">次の一歩とコミットメントを決め、実行の準備を整える</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div id="conversation-log" className="conversation-log" style={{ display: 'none' }}>
+        )}
+        <div id="conversation-log" className="conversation-log">
           <div id="log-container" className="log-container"></div>
         </div>
-        <form id="text-chat-form" className="text-chat-form" style={{ display: 'none' }}>
+        <form id="text-chat-form" className="text-chat-form">
           <label htmlFor="text-chat-input" className="text-chat-label">テキストで送信</label>
           <div className="text-chat-controls">
             <textarea
@@ -58,6 +99,9 @@ export function ConversationPanel() {
               placeholder="AIコーチに伝えたいことを入力してください"
               aria-label="コーチへのテキストメッセージ"
               disabled
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
             ></textarea>
             <button id="text-chat-submit" type="submit" className="text-chat-send" disabled>送信</button>
           </div>

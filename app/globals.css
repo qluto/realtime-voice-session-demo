@@ -773,6 +773,7 @@ body.config-sidebar-open {
   border: 1px solid var(--border-soft);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
 }
 
 .text-chat-label {
@@ -893,6 +894,13 @@ body.config-sidebar-open {
   box-shadow: 0 10px 20px rgba(49, 78, 255, 0.15);
 }
 
+#copy-transcript-btn,
+#summary-controls,
+#conversation-log,
+#text-chat-form {
+  display: none;
+}
+
 .instructions-card {
   background: linear-gradient(135deg, rgba(97, 115, 255, 0.09) 0%, rgba(255, 255, 255, 0.85) 70%);
   border: 1px solid rgba(97, 115, 255, 0.2);
@@ -901,6 +909,33 @@ body.config-sidebar-open {
   color: var(--text-strong);
   box-shadow: 0 14px 32px rgba(88, 99, 148, 0.15);
   flex-shrink: 0;
+}
+
+.instructions-toggle {
+  display: none;
+}
+
+.instructions-toggle-button {
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(58, 75, 255, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 1.15rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.instructions-toggle-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(58, 75, 255, 0.2);
+  background: rgba(58, 75, 255, 0.14);
+}
+
+.instructions-toggle-button:focus-visible {
+  outline: 3px solid rgba(58, 75, 255, 0.2);
+  outline-offset: 2px;
 }
 
 .instructions-card h3 {
@@ -1289,17 +1324,113 @@ body.config-sidebar-open {
   }
 }
 
-@media (max-width: 600px) {
-  .app-shell {
-    padding: 1.5rem;
+@media (max-width: 720px) {
+  .conversation-panel .panel-body {
+    gap: 1rem;
   }
 
-  .panel {
-    padding: 1.5rem;
+  .conversation-panel .instructions-toggle {
+    order: 0;
+  }
+
+  .conversation-panel .text-chat-form {
+    order: 2;
+  }
+
+  .conversation-panel .conversation-log {
+    order: 1;
+  }
+
+  .conversation-panel .instructions-card {
+    order: 3;
+  }
+
+  .instructions-toggle {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .instructions-toggle-button {
+    width: 100%;
   }
 
   .conversation-log {
-    min-height: 360px;
+    max-height: 50vh;
+  }
+
+  .log-container {
+    max-height: 44vh;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell {
+    padding: 1rem;
+  }
+
+  .app-main {
+    gap: 1.25rem;
+  }
+
+  .app-header {
+    padding: 1.25rem;
+    gap: 1.25rem;
+  }
+
+  .brand-title {
+    font-size: 1.5rem;
+  }
+
+  .session-cluster {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .modality-toggle {
+    width: 100%;
+  }
+
+  .session-actions {
+    width: 100%;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .session-actions button {
+    width: 100%;
+  }
+
+  .panel {
+    padding: 1.25rem;
+  }
+
+  .content-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    height: auto;
+    max-height: none;
+  }
+
+  .conversation-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .conversation-panel .panel-body {
+    overflow: visible;
+  }
+
+  .conversation-log {
+    min-height: 320px;
+    max-height: none;
+  }
+
+  .log-container {
+    max-height: 65vh;
+    padding: 1.25rem;
   }
 
   .message {
