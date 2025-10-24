@@ -94,6 +94,7 @@ export function ConfigSidebar() {
                 <option value="weekly-reflection">週次の振り返り</option>
                 <option value="goal-calibration">目標キャリブレーション</option>
                 <option value="resilience-reset">レジリエンス・リセット</option>
+                <option value="free-talk">自由対話</option>
               </select>
               <p id="purpose-description" className="preset-description">一週間の出来事や学びを整理し、次の行動に繋げたいときに。</p>
             </div>

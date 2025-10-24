@@ -1,9 +1,8 @@
 const phases = [
-  { key: 'opening', label: 'Opening' },
-  { key: 'reflection', label: 'Reflection' },
-  { key: 'insight', label: 'Insight' },
-  { key: 'integration', label: 'Integration' },
-  { key: 'closing', label: 'Closing' }
+  { key: 'goal', label: 'Goal' },
+  { key: 'reality', label: 'Reality' },
+  { key: 'options', label: 'Options' },
+  { key: 'will', label: 'Will' }
 ] as const
 
 export function SupportRail() {

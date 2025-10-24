@@ -1,6 +1,6 @@
 import { RealtimeSession } from '@openai/agents/realtime'
 
-export type PhaseKey = 'opening' | 'reflection' | 'insight' | 'integration' | 'closing'
+export type PhaseKey = 'goal' | 'reality' | 'options' | 'will'
 
 type TranscriptEntry = {
   role: 'client' | 'coach'
@@ -24,14 +24,13 @@ type SessionAnalyzerOptions = {
 }
 
 const PHASE_LABELS: Record<PhaseKey, string> = {
-  opening: 'オープニング',
-  reflection: '深い振り返り',
-  insight: '洞察の統合',
-  integration: '前進的統合',
-  closing: 'クロージング'
+  goal: 'Goal（目標設定）',
+  reality: 'Reality（現状把握）',
+  options: 'Options（選択肢の探索）',
+  will: 'Will（意志と行動）'
 }
 
-const PHASE_ORDER: PhaseKey[] = ['opening', 'reflection', 'insight', 'integration', 'closing']
+const PHASE_ORDER: PhaseKey[] = ['goal', 'reality', 'options', 'will']
 
 const SCORE_REQUEST_COOLDOWN = 15_000
 const MAX_TRANSCRIPTS = 40
@@ -44,11 +43,10 @@ export class SessionAnalyzer {
   private transcripts: TranscriptEntry[] = []
   private processedEventIds = new Set<string>()
   private phaseScores: Record<PhaseKey, number> = {
-    opening: 0,
-    reflection: 0,
-    insight: 0,
-    integration: 0,
-    closing: 0
+    goal: 0,
+    reality: 0,
+    options: 0,
+    will: 0
   }
   private autoSummaryEnabled: boolean
   private pendingScore = false
@@ -57,6 +55,9 @@ export class SessionAnalyzer {
   private closureSuggested = false
   private summarySuppressedUntil = 0
   private disposed = false
+  private awaitingSummaryConsent = false
+  private pendingConsentCheck = false
+  private summaryInProgress = false
 
   constructor(options: SessionAnalyzerOptions) {
     this.session = options.session
@@ -116,32 +117,27 @@ export class SessionAnalyzer {
     this.autoSummaryEnabled = enabled
     if (!enabled) {
       this.hideClosureSuggestion()
+      this.pendingConsentCheck = false
     }
   }
 
   async acceptClosureSuggestion() {
     if (this.disposed) return
-    this.hideClosureSuggestion()
-    this.closureSuggested = true
-    try {
-      await this.onRequestSummary()
-    } catch (error) {
-      console.error('Failed to request session summary:', error)
-    }
+    this.requestSummaryFromAnalyzer()
   }
 
   declineClosureSuggestion() {
     if (this.disposed) return
-    this.hideClosureSuggestion()
-    this.summarySuppressedUntil = Date.now() + SUPPRESSION_WINDOW
-    this.closureSuggested = false
-    this.sendContinuationPrompt()
+    this.handleSummaryDeclined()
   }
 
   markSummaryInitiated() {
     if (this.disposed) return
     this.hideClosureSuggestion()
     this.closureSuggested = true
+    this.awaitingSummaryConsent = false
+    this.pendingConsentCheck = false
+    this.summaryInProgress = true
   }
 
   dispose() {
@@ -150,6 +146,9 @@ export class SessionAnalyzer {
     this.processedEventIds.clear()
     this.pendingScore = false
     this.pendingScoreEventId = null
+    this.pendingConsentCheck = false
+    this.awaitingSummaryConsent = false
+    this.summaryInProgress = false
     // retain UI state until next session
   }
 
@@ -172,16 +171,18 @@ export class SessionAnalyzer {
     this.lastScoreRequestedAt = 0
     this.closureSuggested = false
     this.summarySuppressedUntil = 0
+    this.awaitingSummaryConsent = false
+    this.pendingConsentCheck = false
+    this.summaryInProgress = false
     this.resetScores()
   }
 
   private resetScores() {
     this.phaseScores = {
-      opening: 0,
-      reflection: 0,
-      insight: 0,
-      integration: 0,
-      closing: 0
+      goal: 0,
+      reality: 0,
+      options: 0,
+      will: 0
     }
 
     PHASE_ORDER.forEach((phase) => {
@@ -192,7 +193,7 @@ export class SessionAnalyzer {
     })
 
     if (this.controls.currentPhase) {
-      this.controls.currentPhase.textContent = '現在のフェーズ: オープニングを探索中'
+      this.controls.currentPhase.textContent = '現在のフェーズ: Goal（目標設定）を探索中'
     }
   }
 
@@ -220,10 +221,17 @@ export class SessionAnalyzer {
       this.transcripts.splice(0, this.transcripts.length - MAX_TRANSCRIPTS)
     }
 
+    if (role === 'client') {
+      this.maybeEvaluateSummaryConsent(text)
+    }
+
     this.scheduleProgressEvaluation()
   }
 
   private scheduleProgressEvaluation() {
+    if (this.summaryInProgress) return
+    if (this.awaitingSummaryConsent) return
+    if (this.pendingConsentCheck) return
     if (this.pendingScore) return
     const now = Date.now()
     if (now - this.lastScoreRequestedAt < SCORE_REQUEST_COOLDOWN) return
@@ -270,6 +278,16 @@ export class SessionAnalyzer {
     if (!response) return
 
     const purpose = response.metadata?.purpose || response.metadata?.Purpose
+    if (purpose === 'summary-consent-eval') {
+      this.pendingConsentCheck = false
+      const text = this.extractTextFromResponse(response)
+      if (!text) return
+      const parsed = this.safeParseJson(text)
+      if (!parsed) return
+      this.handleSummaryConsentResult(parsed)
+      return
+    }
+
     if (purpose !== 'progress-score' && purpose !== 'closure-readiness') {
       return
     }
@@ -315,7 +333,7 @@ export class SessionAnalyzer {
 
     const summaryReady = this.isSummaryReady(parsed, scores)
     if (summaryReady && this.autoSummaryEnabled) {
-      this.maybeShowClosureSuggestion(reason)
+      this.maybePromptSummaryConsent(reason)
     }
   }
 
@@ -343,16 +361,12 @@ export class SessionAnalyzer {
     const parsedReady = parsed.summary_ready ?? parsed.summaryReady ?? parsed.ready_for_summary ?? parsed.readyForSummary
     if (typeof parsedReady === 'boolean') return parsedReady
 
-    const closingScore = scores.closing ?? 0
+    const willScore = scores.will ?? 0
     const average = PHASE_ORDER.reduce((acc, key) => acc + (scores[key] ?? 0), 0) / PHASE_ORDER.length
-    return closingScore >= 0.65 && average >= 0.6
+    return willScore >= 0.65 && average >= 0.6
   }
 
-  private maybeShowClosureSuggestion(reason: string) {
-    const now = Date.now()
-    if (this.closureSuggested) return
-    if (now < this.summarySuppressedUntil) return
-
+  private showClosureSuggestion(reason: string) {
     const container = this.controls.closureContainer
     const message = this.controls.closureMessage
     if (!container || !message) return
@@ -363,12 +377,92 @@ export class SessionAnalyzer {
     this.closureSuggested = true
   }
 
+  private maybePromptSummaryConsent(reason: string) {
+    if (this.disposed) return
+    if (this.summaryInProgress) return
+    const now = Date.now()
+    if (now < this.summarySuppressedUntil) return
+
+    this.showClosureSuggestion(reason)
+
+    if (this.awaitingSummaryConsent) {
+      return
+    }
+
+    this.awaitingSummaryConsent = true
+    try {
+      const instructions = this.buildSummaryConsentPrompt(reason)
+      this.session.transport.sendEvent({
+        type: 'response.create',
+        response: {
+          conversation: 'none',
+          metadata: { purpose: 'summary-consent' },
+          output_modalities: ['audio', 'text'],
+          instructions
+        }
+      })
+    } catch (error) {
+      console.error('Failed to prompt summary consent:', error)
+      this.awaitingSummaryConsent = false
+    }
+  }
+
+  private buildSummaryConsentPrompt(reason: string): string {
+    const base = reason && reason.trim()
+      ? `進行状況の解析結果として「${reason.trim()}」と判断しています。`
+      : '進行状況の解析から、主要なフェーズが十分に探索されたと判断しています。'
+    return `${base} セッションのまとめに移行して良いか、クライアントに丁寧に確認してください。必ず「そろそろまとめに入りますか？」というフレーズを含め、日本語で短く尋ねてください。`
+  }
+
+  private maybeEvaluateSummaryConsent(latestClientText: string) {
+    if (!this.awaitingSummaryConsent) return
+    if (this.summaryInProgress) return
+    if (this.pendingConsentCheck) return
+
+    const eventId = `summary_consent_${Date.now()}`
+    const transcript = this.buildTranscriptSnippet(10)
+    const prompt = this.buildConsentClassificationPrompt(transcript, latestClientText)
+
+    this.pendingConsentCheck = true
+    try {
+      this.session.transport.sendEvent({
+        event_id: eventId,
+        type: 'response.create',
+        response: {
+          conversation: 'none',
+          metadata: { purpose: 'summary-consent-eval' },
+          output_modalities: ['text'],
+          input: [
+            {
+              type: 'message',
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: prompt
+                }
+              ]
+            }
+          ]
+        }
+      })
+    } catch (error) {
+      console.error('Failed to evaluate summary consent:', error)
+      this.pendingConsentCheck = false
+    }
+  }
+
+  private buildConsentClassificationPrompt(transcript: string, latestClientText: string): string {
+    return `あなたはコーチングセッションのモデレーターです。最新のクライアント発話が「まとめに入る」ことへの同意かどうかを判定してください。会話の抜粋と最新のクライアント発話が以下にあります。\n\nTranscript:\n${transcript}\n\nLatest client message:\n${latestClientText}\n\nJSONのみで回答し、次のフォーマットを厳守してください:\n{\n  "decision": "accept" | "decline" | "uncertain",\n  "confidence": number,\n  "reason": string\n}\n\n"accept"はまとめへの移行に同意、"decline"は拒否または保留、判断不能の場合は"uncertain"としてください。reasonは日本語で短く記述してください。`
+  }
+
   private hideClosureSuggestion() {
     const container = this.controls.closureContainer
     if (container) {
       container.style.display = 'none'
     }
     this.closureSuggested = false
+    this.awaitingSummaryConsent = false
   }
 
   private sendContinuationPrompt() {
@@ -387,6 +481,39 @@ export class SessionAnalyzer {
     }
   }
 
+  private handleSummaryConsentResult(parsed: any) {
+    if (this.summaryInProgress) return
+    const decisionRaw = typeof parsed.decision === 'string' ? parsed.decision.toLowerCase().trim() : ''
+    if (decisionRaw === 'accept') {
+      this.requestSummaryFromAnalyzer()
+      return
+    }
+
+    if (decisionRaw === 'decline') {
+      this.handleSummaryDeclined()
+    }
+  }
+
+  private requestSummaryFromAnalyzer() {
+    if (this.disposed) return
+    this.awaitingSummaryConsent = false
+    this.pendingConsentCheck = false
+    this.summaryInProgress = true
+    this.hideClosureSuggestion()
+    Promise.resolve(this.onRequestSummary()).catch((error) => {
+      console.error('Failed to request session summary:', error)
+      this.summaryInProgress = false
+    })
+  }
+
+  private handleSummaryDeclined() {
+    this.awaitingSummaryConsent = false
+    this.pendingConsentCheck = false
+    this.hideClosureSuggestion()
+    this.summarySuppressedUntil = Date.now() + SUPPRESSION_WINDOW
+    this.sendContinuationPrompt()
+  }
+
   private buildTranscriptSnippet(limit: number = 12): string {
     const recent = this.transcripts.slice(-limit)
     return recent
@@ -395,7 +522,7 @@ export class SessionAnalyzer {
   }
 
   private buildProgressPrompt(transcript: string): string {
-    return `以下はコーチ("Coach")とクライアント("Client")の週次振り返りセッションの抜粋です。ICFコアコンピテンシーに基づき、各フェーズの進捗を0から1で評価してください。JSONのみを返し、フォーマットは次のとおりです:\n{\n  "scores": {\n    "opening": number,\n    "reflection": number,\n    "insight": number,\n    "integration": number,\n    "closing": number\n  },\n  "current_phase": string,\n  "summary_ready": boolean,\n  "reason": string\n}\nスコアは0から1の範囲で小数点2桁までにし、reasonは日本語で簡潔に記述してください。\n\nTranscript:\n${transcript}`
+    return `以下はコーチ("Coach")とクライアント("Client")のコーチングセッションの抜粋です。GROWモデル（Goal→Reality→Options→Will）に基づき、各フェーズの進捗を0から1で評価してください。JSONのみを返し、フォーマットは次のとおりです:\n{\n  "scores": {\n    "goal": number,\n    "reality": number,\n    "options": number,\n    "will": number\n  },\n  "current_phase": string,\n  "summary_ready": boolean,\n  "reason": string\n}\n\n各フェーズの評価基準:\n- goal: 目標や望む成果が明確化されているか\n- reality: 現状の把握、課題や状況の理解が深まっているか\n- options: 選択肢や可能性が十分に探索されているか\n- will: 具体的な行動やコミットメントが設定されているか\n\nスコアは0から1の範囲で小数点2桁までにし、reasonは日本語で簡潔に記述してください。\n\nTranscript:\n${transcript}`
   }
 
   private extractTextFromItem(item: any): string {
@@ -474,21 +601,19 @@ export class SessionAnalyzer {
     })
 
     return {
-      opening: scores.opening ?? 0,
-      reflection: scores.reflection ?? 0,
-      insight: scores.insight ?? 0,
-      integration: scores.integration ?? 0,
-      closing: scores.closing ?? 0
+      goal: scores.goal ?? 0,
+      reality: scores.reality ?? 0,
+      options: scores.options ?? 0,
+      will: scores.will ?? 0
     }
   }
 
   private matchPhaseKey(value: string): PhaseKey | null {
     const normalized = value.toLowerCase().replace(/[^a-z]/g, '')
-    if (normalized.includes('opening')) return 'opening'
-    if (normalized.includes('reflection')) return 'reflection'
-    if (normalized.includes('insight')) return 'insight'
-    if (normalized.includes('integration')) return 'integration'
-    if (normalized.includes('closing')) return 'closing'
+    if (normalized.includes('goal')) return 'goal'
+    if (normalized.includes('reality')) return 'reality'
+    if (normalized.includes('option')) return 'options'
+    if (normalized.includes('will')) return 'will'
     return null
   }
 

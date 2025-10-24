@@ -2,6 +2,7 @@ import {
   coachingModeGuides,
   coachingModeOrder,
   type CoachingMode,
+  type GrowPhase,
   type PersonalityPreset,
   type SessionPurposePreset
 } from './utils/prompt-presets.ts'
@@ -63,19 +64,15 @@ export type DynamicPromptContext = {
   confidence?: Partial<Record<CoachingMode, number>>
 }
 
-function renderModeSection(mode: CoachingMode, purpose: SessionPurposePreset): string {
+function renderModeSection(mode: CoachingMode): string {
   const guide = coachingModeGuides[mode]
   const questionLines = guide.questionSeeds.map((item) => `- ${item}`).join('\n')
   const moveLines = guide.coachingMoves.map((item) => `- ${item}`).join('\n')
   const watchLines = guide.watchOuts.map((item) => `- ${item}`).join('\n')
-  const purposeNote = purpose.modeBiases[mode]
-    ? `Purpose nuance: ${purpose.modeBiases[mode]}`
-    : 'Purpose nuance: Use responsively based on client signals.'
 
   return `## ${guide.label}
 ${guide.description}
 Intention: ${guide.intention}
-${purposeNote}
 
 Question seeds to keep fresh:
 ${questionLines}
@@ -85,6 +82,26 @@ ${moveLines}
 
 Watch-outs:
 ${watchLines}`
+}
+
+function renderGrowPhaseGuidance(purpose: SessionPurposePreset): string {
+  const growPhases: GrowPhase[] = ['goal', 'reality', 'options', 'will']
+  const phaseLabels: Record<GrowPhase, string> = {
+    goal: 'Goal',
+    reality: 'Reality',
+    options: 'Options',
+    will: 'Will'
+  }
+
+  const sections = growPhases
+    .filter((phase) => purpose.growGuidance[phase])
+    .map((phase) => {
+      return `## ${phaseLabels[phase]} Phase
+${purpose.growGuidance[phase]}`
+    })
+    .join('\n\n')
+
+  return sections || 'Apply GROW framework dynamically based on client needs.'
 }
 
 function formatConfidenceSnapshot(confidence?: Partial<Record<CoachingMode, number>>): string {
@@ -98,18 +115,21 @@ function formatConfidenceSnapshot(confidence?: Partial<Record<CoachingMode, numb
 }
 
 function buildLiveCompassSection(purpose: SessionPurposePreset, dynamic?: DynamicPromptContext): string {
+  const phaseLabels: Record<GrowPhase, string> = {
+    goal: 'Goal',
+    reality: 'Reality',
+    options: 'Options',
+    will: 'Will'
+  }
+
   if (!dynamic || !dynamic.mode) {
-    const defaultMode = purpose.defaultMode
-    const guide = coachingModeGuides[defaultMode]
-    const bias = purpose.modeBiases[defaultMode] ?? guide.intention
-    const fallbackQuestions = guide.questionSeeds.slice(0, 2).map((item) => `- ${item}`).join('\n')
+    const defaultPhase = purpose.defaultPhase
+    const phaseGuidance = purpose.growGuidance[defaultPhase] ?? 'Begin exploring with the client.'
     return `# Live Conversation Compass
-Current guidance: Begin with ${guide.label} mode to honour what matters now.
-Why: ${bias}
+Current guidance: Begin with ${phaseLabels[defaultPhase]} phase of the GROW model.
+Why: ${phaseGuidance}
 Confidence snapshot: ${formatConfidenceSnapshot()}
-Ask 1-2 of these to open space:
-${fallbackQuestions}
-Flow into other modes as soon as client signals clarity or new needs.`
+Flow through GROW phases naturally as the client's needs emerge.`
   }
 
   const guide = coachingModeGuides[dynamic.mode]
@@ -139,7 +159,8 @@ export function buildAgentInstructions(
   dynamicContext?: DynamicPromptContext
 ): string {
   const emphasisLines = purpose.emphasis.map((item) => `- ${item}`).join('\n')
-  const modeSections = coachingModeOrder.map((mode) => renderModeSection(mode, purpose)).join('\n\n')
+  const modeSections = coachingModeOrder.map((mode) => renderModeSection(mode)).join('\n\n')
+  const growGuidance = renderGrowPhaseGuidance(purpose)
 
   const sections = [
     `# Role & Objective
@@ -163,6 +184,8 @@ ${personality.responseFocus}`,
 ${purpose.focusStatement}
 
 ${emphasisLines}`,
+    `# GROW Framework Guidance
+${growGuidance}`,
     `# Coaching Mode Compass
 ${modeSections}`,
     buildLiveCompassSection(purpose, dynamicContext)

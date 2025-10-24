@@ -94,6 +94,7 @@ export function setupVoiceAgent() {
   const textChatSubmit = document.querySelector<HTMLButtonElement>('#text-chat-submit');
   const textChatHint = document.querySelector<HTMLElement>('#text-chat-hint');
   let isTextChatComposing = false;
+  let hasSentInitialGreeting = false;
 
   const coachCalibratorInputs = coachCalibratorForm
     ? Array.from(coachCalibratorForm.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
@@ -114,19 +115,74 @@ export function setupVoiceAgent() {
 
   type Modality = 'voice' | 'text';
   let currentModality: Modality = 'voice';
-  const suppressedPurposeSet = new Set(['progress-score', 'closure-readiness']);
+  const suppressedPurposeSet = new Set(['progress-score', 'closure-readiness', 'summary-consent-eval']);
   const suppressedResponseIds = new Set<string>();
   const suppressedItemIds = new Set<string>();
   const pendingLocalUserMessages: string[] = [];
+  const SUMMARY_DISCONNECT_DELAY = 1500;
+  let summaryResponseId: string | null = null;
+  let summaryAwaitingCompletion = false;
+  let summaryWaitingForPlaybackStop = false;
+  let summaryAutoDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const normalizeForDedup = (value: string) => value.trim().replace(/\s+/g, ' ');
 
-  const recordLocalUserMessage = (raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    pendingLocalUserMessages.push(normalizeForDedup(trimmed));
-    return addMessageToLog('user', trimmed);
-  };
+  const recordLocalUserMessage = (raw: string, options: { log?: boolean } = {}) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return null
+    pendingLocalUserMessages.push(normalizeForDedup(trimmed))
+    if (options.log === false) return null
+    return addMessageToLog('user', trimmed)
+  }
+
+  const resetSummaryTracking = () => {
+    summaryAwaitingCompletion = false;
+    summaryResponseId = null;
+    summaryWaitingForPlaybackStop = false;
+    if (summaryAutoDisconnectTimer) {
+      clearTimeout(summaryAutoDisconnectTimer);
+      summaryAutoDisconnectTimer = null;
+    }
+  }
+
+  const scheduleSummaryAutoDisconnect = () => {
+    if (summaryAutoDisconnectTimer) return;
+    summaryAutoDisconnectTimer = setTimeout(() => {
+      summaryAutoDisconnectTimer = null;
+      disconnectFromVoiceAgent();
+    }, SUMMARY_DISCONNECT_DELAY);
+  }
+
+  const getGreetingForCurrentTime = () => {
+    const hour = new Date().getHours()
+    if (hour < 5) return 'こんばんは'
+    if (hour < 11) return 'おはようございます'
+    if (hour < 18) return 'こんにちは'
+    if (hour < 22) return 'こんばんは'
+    return 'こんばんは'
+  }
+
+  const sendInitialGreeting = () => {
+    if (!session) return
+    if (hasSentInitialGreeting) return
+    const greeting = getGreetingForCurrentTime()
+    if (!greeting) return
+    try {
+      recordLocalUserMessage(greeting, { log: false })
+      session.sendMessage({
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: greeting
+        }]
+      })
+      hasSentInitialGreeting = true
+      console.log('🙋 Sent automatic greeting message to agent:', greeting)
+    } catch (error) {
+      console.error('Failed to send initial greeting:', error)
+    }
+  }
 
   const computeInstructions = (dynamic?: DynamicPromptContext) =>
     buildAgentInstructions(currentPersonalityPreset, currentPurposePreset, lastPreferenceDirectives, dynamic);
@@ -270,19 +326,17 @@ export function setupVoiceAgent() {
   };
 
   const phaseFillElements: Record<PhaseKey, HTMLElement | null> = {
-    opening: document.querySelector<HTMLElement>('[data-phase-fill="opening"]'),
-    reflection: document.querySelector<HTMLElement>('[data-phase-fill="reflection"]'),
-    insight: document.querySelector<HTMLElement>('[data-phase-fill="insight"]'),
-    integration: document.querySelector<HTMLElement>('[data-phase-fill="integration"]'),
-    closing: document.querySelector<HTMLElement>('[data-phase-fill="closing"]')
+    goal: document.querySelector<HTMLElement>('[data-phase-fill="goal"]'),
+    reality: document.querySelector<HTMLElement>('[data-phase-fill="reality"]'),
+    options: document.querySelector<HTMLElement>('[data-phase-fill="options"]'),
+    will: document.querySelector<HTMLElement>('[data-phase-fill="will"]')
   }
 
   const phaseScoreElements: Record<PhaseKey, HTMLElement | null> = {
-    opening: document.querySelector<HTMLElement>('[data-phase-score="opening"]'),
-    reflection: document.querySelector<HTMLElement>('[data-phase-score="reflection"]'),
-    insight: document.querySelector<HTMLElement>('[data-phase-score="insight"]'),
-    integration: document.querySelector<HTMLElement>('[data-phase-score="integration"]'),
-    closing: document.querySelector<HTMLElement>('[data-phase-score="closing"]')
+    goal: document.querySelector<HTMLElement>('[data-phase-score="goal"]'),
+    reality: document.querySelector<HTMLElement>('[data-phase-score="reality"]'),
+    options: document.querySelector<HTMLElement>('[data-phase-score="options"]'),
+    will: document.querySelector<HTMLElement>('[data-phase-score="will"]')
   }
 
   const storageAvailable = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -633,15 +687,22 @@ export function setupVoiceAgent() {
 
     try {
       sessionAnalyzer?.markSummaryInitiated();
+      resetSummaryTracking();
+      summaryAwaitingCompletion = true;
+      summaryResponseId = null;
 
       recordLocalUserMessage('セッションのまとめを要求しました。');
+
+      const summaryPrompt = '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。';
+      const desiredModalities = getDesiredOutputModalities();
+      summaryWaitingForPlaybackStop = desiredModalities.includes('audio');
 
       session.sendMessage({
         type: 'message',
         role: 'user',
         content: [{
           type: 'input_text',
-          text: '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。'
+          text: summaryPrompt
         }]
       });
 
@@ -652,6 +713,7 @@ export function setupVoiceAgent() {
       console.log('📝 Summary request sent to coach');
     } catch (error) {
       console.error('Failed to send summary request:', error);
+      resetSummaryTracking();
       if (!triggeredByAnalyzer) {
         alert('Failed to request summary. Please try again.');
       }
@@ -968,8 +1030,10 @@ export function setupVoiceAgent() {
       currentPurposePreset = purposePreset;
       lastDynamicContext = null;
       lastOutputModalities = null;
+      hasSentInitialGreeting = false;
       suppressedResponseIds.clear();
       suppressedItemIds.clear();
+      resetSummaryTracking();
 
       const instructions = buildAgentInstructions(personalityPreset, purposePreset, lastPreferenceDirectives);
       lastInstructionsSent = instructions;
@@ -1033,7 +1097,16 @@ export function setupVoiceAgent() {
           console.log(`🔊 AUDIO EVENT: ${event.type}`, event);
         }
         if (event.type === 'response.created') {
-          maybeSuppressResponse(event.response);
+          const response = event.response;
+          if (response?.metadata?.purpose === 'session-summary') {
+            summaryAwaitingCompletion = true;
+            summaryResponseId = response.id || null;
+            console.log('🧾 Summary response started', { responseId: summaryResponseId, viaMetadata: true });
+          } else if (summaryAwaitingCompletion && !summaryResponseId && response?.id) {
+            summaryResponseId = response.id;
+            console.log('🧾 Summary response started', { responseId: summaryResponseId, viaFirstResponse: true });
+          }
+          maybeSuppressResponse(response);
         } else if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
           if (event.response_id && suppressedResponseIds.has(event.response_id)) {
             recordSuppressedItemId(event.item);
@@ -1045,12 +1118,14 @@ export function setupVoiceAgent() {
           updateMicrophoneState();
           startUsageTracking(session!);
           startSessionTimer();
+          sendInitialGreeting();
         } else if (event.type === 'error' || event.type === 'close') {
           console.log('Disconnected from OpenAI Realtime API');
           stopUsageTracking(session);
           stopSessionTimer();
           stopSpeakingAnimation();
           hideRecordingIndicator();
+          resetSummaryTracking();
           sessionAnalyzer?.dispose();
           sessionAnalyzer = null;
 
@@ -1136,17 +1211,6 @@ export function setupVoiceAgent() {
             console.log('🎵 Starting animation after output audio transcript done');
             startSpeakingAnimation(messageElement);
           }
-        } else if (event.type === 'output_audio_buffer.stopped') {
-          // Audio playback completed - this is the actual event that fires
-          console.log('🔊 Audio playback stopped - stopping animation');
-          stopSpeakingAnimation();
-        } else if (event.type === 'response.audio.delta') {
-          // Audio chunks being played
-          console.log('🔊 Audio delta - audio is being played');
-        } else if (event.type === 'response.audio.done') {
-          // Audio playback completed (backup)
-          console.log('🔊 Audio done - stopping animation');
-          stopSpeakingAnimation();
         } else if (event.type === 'response.done') {
           // Response completed - DO NOT stop animation here, let audio events handle it
           console.log('🎯 Response done - NOT stopping animation, waiting for audio events');
@@ -1173,6 +1237,42 @@ export function setupVoiceAgent() {
               }
             });
           }
+
+          if (summaryAwaitingCompletion && response) {
+            const purpose = response.metadata?.purpose || response.metadata?.Purpose;
+            const responseId = response.id || event.response_id || null;
+            if (purpose === 'session-summary' || (summaryResponseId && responseId && summaryResponseId === responseId)) {
+              summaryAwaitingCompletion = false;
+              summaryResponseId = null;
+              if (summaryWaitingForPlaybackStop) {
+                console.log('✅ Summary response finished, waiting for audio playback to stop before disconnecting');
+              } else {
+                console.log('✅ Summary response finished in text mode, scheduling auto disconnect');
+                scheduleSummaryAutoDisconnect();
+              }
+            }
+          }
+        } else if (event.type === 'output_audio_buffer.stopped') {
+          // Audio playback completed - this is the actual event that fires
+          console.log('🔊 Audio playback stopped - stopping animation');
+          stopSpeakingAnimation();
+          if (summaryWaitingForPlaybackStop) {
+            summaryWaitingForPlaybackStop = false;
+            console.log('✅ Summary audio playback stopped, scheduling auto disconnect');
+            scheduleSummaryAutoDisconnect();
+          }
+        } else if (event.type === 'response.audio.delta') {
+          // Audio chunks being played
+          console.log('🔊 Audio delta - audio is being played');
+        } else if (event.type === 'response.audio.done') {
+          // Audio playback completed (backup)
+          console.log('🔊 Audio done - stopping animation');
+          stopSpeakingAnimation();
+          if (summaryWaitingForPlaybackStop) {
+            summaryWaitingForPlaybackStop = false;
+            console.log('✅ Summary audio done event detected, scheduling auto disconnect');
+            scheduleSummaryAutoDisconnect();
+          }
         }
 
         sessionAnalyzer?.handleTransportEvent(event);
@@ -1187,6 +1287,7 @@ export function setupVoiceAgent() {
         hideRecordingIndicator();
 
 
+        resetSummaryTracking();
         sessionAnalyzer?.dispose();
         sessionAnalyzer = null;
         updateConnectionStatus(false);
@@ -1204,6 +1305,7 @@ export function setupVoiceAgent() {
           updateConnectionStatus(true);
           updateMicrophoneState();
           startSessionTimer();
+          sendInitialGreeting();
         }
       }, 1000);
 
@@ -1232,8 +1334,10 @@ export function setupVoiceAgent() {
     lastInstructionsSent = null;
     lastDynamicContext = null;
     lastOutputModalities = null;
+    hasSentInitialGreeting = false;
     suppressedResponseIds.clear();
     suppressedItemIds.clear();
+    resetSummaryTracking();
 
     // Add conversation end marker before disconnecting
     addConversationEndMarker();
