@@ -54,7 +54,6 @@ export class SessionAnalyzer {
   private pendingScore = false
   private pendingScoreEventId: string | null = null
   private lastScoreRequestedAt = 0
-  private closureSuggested = false
   private summarySuppressedUntil = 0
   private disposed = false
   private awaitingSummaryConsent = false
@@ -137,7 +136,6 @@ export class SessionAnalyzer {
   markSummaryInitiated() {
     if (this.disposed) return
     this.hideClosureSuggestion()
-    this.closureSuggested = true
     this.awaitingSummaryConsent = false
     this.pendingConsentCheck = false
     this.summaryInProgress = true
@@ -172,7 +170,6 @@ export class SessionAnalyzer {
     this.pendingScore = false
     this.pendingScoreEventId = null
     this.lastScoreRequestedAt = 0
-    this.closureSuggested = false
     this.summarySuppressedUntil = 0
     this.awaitingSummaryConsent = false
     this.pendingConsentCheck = false
@@ -377,7 +374,6 @@ export class SessionAnalyzer {
     const prompt = reason && reason.trim() ? reason.trim() : '主要フェーズを概ね完了しました。'
     message.textContent = `${prompt}\nセッションをまとめに移行しますか？`
     container.style.display = 'block'
-    this.closureSuggested = true
   }
 
   private maybePromptSummaryConsent(reason: string) {
@@ -465,7 +461,6 @@ export class SessionAnalyzer {
     if (container) {
       container.style.display = 'none'
     }
-    this.closureSuggested = false
     this.awaitingSummaryConsent = false
   }
 
