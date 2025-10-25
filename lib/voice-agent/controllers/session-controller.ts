@@ -205,7 +205,6 @@ export class SessionController {
 
   handleModalityChange(modality: Modality) {
     this.currentModality = modality
-    this.summaryController.setModality(modality)
     this.lastOutputModalities = null
     this.updateMicrophoneState()
   }
@@ -296,7 +295,7 @@ export class SessionController {
     this.isConnecting = connecting
     const hasUsageData = getHasUsageData()
 
-    this.onStatusChange({ connected, connecting, hasUsageData })
+    this.onStatusChange({ connected, connecting: this.isConnecting, hasUsageData })
 
     if (connected) {
       showConversationLog()

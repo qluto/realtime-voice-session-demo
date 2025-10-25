@@ -1,5 +1,4 @@
 import { type VoiceAgentDomRefs } from '../internals/dom-registry.ts'
-import { type Modality } from '../internals/ui-state.ts'
 import { type SessionAnalyzer } from '../session-analyzer/index.ts'
 
 const SUMMARY_PROMPT = '今までの会話を基に、今週の振り返りの重要なポイントをまとめてください。セッションを自然にクロージングに向けてください。'
@@ -31,7 +30,6 @@ export class SummaryController {
   private summaryAutoDisconnectTimer: ReturnType<typeof setTimeout> | null = null
   private sessionAnalyzer: SessionAnalyzer | null = null
   private isConnected = false
-  private currentModality: Modality = 'voice'
   private removeListeners: (() => void)[] = []
 
   constructor(options: SummaryControllerOptions) {
@@ -61,10 +59,6 @@ export class SummaryController {
 
   setConnected(connected: boolean) {
     this.isConnected = connected
-  }
-
-  setModality(modality: Modality) {
-    this.currentModality = modality
   }
 
   isWaitingForPlaybackStop() {

@@ -114,7 +114,6 @@ export class VoiceAgentController {
       this.currentModality = modality
       this.stateStore.update({ currentModality: modality })
       this.textChatController.setModality(modality)
-      this.summaryController.setModality(modality)
       this.sessionController.handleModalityChange(modality)
       this.syncSessionInstructions()
     })
