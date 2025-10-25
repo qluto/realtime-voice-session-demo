@@ -1,9 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useDomNode } from '@/lib/voice-agent/internals/dom-registry.ts'
 
 export function ConversationPanel() {
   const [showInstructions, setShowInstructions] = useState(true)
+  const copyTranscriptBtnRef = useDomNode('copyTranscriptBtn')
+  const requestSummaryBtnRef = useDomNode('requestSummaryBtn')
+  const textChatFormRef = useDomNode('textChatForm')
+  const textChatInputRef = useDomNode('textChatInput')
+  const textChatSubmitRef = useDomNode('textChatSubmit')
+  const textChatHintRef = useDomNode('textChatHint')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -40,12 +47,24 @@ export function ConversationPanel() {
           <h2 className="panel-title">Coaching conversation</h2>
         </div>
         <div className="panel-actions">
-          <button id="copy-transcript-btn" type="button" className="icon-pill">
+          <button
+            id="copy-transcript-btn"
+            ref={copyTranscriptBtnRef}
+            type="button"
+            className="icon-pill"
+          >
             <span aria-hidden="true">📋</span>
             <span>ログをコピー</span>
           </button>
           <div id="summary-controls" className="summary-controls">
-            <button id="request-summary-btn" type="button" className="pill-button">まとめをリクエスト</button>
+            <button
+              id="request-summary-btn"
+              ref={requestSummaryBtnRef}
+              type="button"
+              className="pill-button"
+            >
+              まとめをリクエスト
+            </button>
           </div>
         </div>
       </div>
@@ -89,11 +108,12 @@ export function ConversationPanel() {
         <div id="conversation-log" className="conversation-log">
           <div id="log-container" className="log-container"></div>
         </div>
-        <form id="text-chat-form" className="text-chat-form">
+        <form id="text-chat-form" ref={textChatFormRef} className="text-chat-form">
           <label htmlFor="text-chat-input" className="text-chat-label">テキストで送信</label>
           <div className="text-chat-controls">
             <textarea
               id="text-chat-input"
+              ref={textChatInputRef}
               className="text-chat-input"
               rows={2}
               placeholder="AIコーチに伝えたいことを入力してください"
@@ -103,9 +123,19 @@ export function ConversationPanel() {
               data-gramm_editor="false"
               data-enable-grammarly="false"
             ></textarea>
-            <button id="text-chat-submit" type="submit" className="text-chat-send" disabled>送信</button>
+            <button
+              id="text-chat-submit"
+              ref={textChatSubmitRef}
+              type="submit"
+              className="text-chat-send"
+              disabled
+            >
+              送信
+            </button>
           </div>
-          <p id="text-chat-hint" className="text-chat-hint">接続後にテキストでメッセージを送信できます。</p>
+          <p id="text-chat-hint" ref={textChatHintRef} className="text-chat-hint">
+            接続後にテキストでメッセージを送信できます。
+          </p>
         </form>
       </div>
     </section>

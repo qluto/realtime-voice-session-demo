@@ -32,8 +32,8 @@ This is a **Weekly Reflection Coaching application** using OpenAI's GPT Realtime
 - `lib/voice-agent/index.ts` – Core voice interaction logic using `@openai/agents`
 - `lib/voice-agent/session-analyzer/` – Adaptive session intelligence helper
 - `lib/voice-agent/utils/` – Timers, usage tracker, prompt presets, logging helpers
-- `lib/voice-agent/prompt-builder.ts` – Dynamic instructions for the agent
-- `lib/voice-agent/personality-recommendation.ts` – Questionnaire scoring and messaging
+- `lib/voice-agent/prompts/prompt-builder.ts` – Dynamic instructions for the agent
+- `lib/voice-agent/questionnaire/personality-recommendation.ts` – Questionnaire scoring and messaging
 
 **Backend (Next.js API routes):**
 - `app/api/generate-token/route.ts` – Secure ephemeral token broker

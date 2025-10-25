@@ -2,7 +2,7 @@ import {
   defaultPersonalityId,
   personalityPresets,
   type PersonalityPreset
-} from './utils/prompt-presets.ts'
+} from '../utils/prompt-presets.ts'
 
 export type PersonalityId = PersonalityPreset['id']
 export type QuestionnaireQuestionId = 'pace' | 'support' | 'emotion'
