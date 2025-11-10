@@ -252,6 +252,12 @@ export class VoiceAgentController {
 
   private async startSession() {
     try {
+      const apiKey = this.dom.apiKeyInput?.value?.trim()
+      if (!apiKey) {
+        alert('OpenAI APIキーを入力してください。')
+        return
+      }
+
       this.textChatController.reset()
       this.lastDynamicContext = null
       const instructions = this.buildInstructions()
@@ -263,11 +269,12 @@ export class VoiceAgentController {
         purposePresetId: this.currentPurposePreset.id,
         questionnaireCompleted: this.questionnaireComplete,
         preferenceDirectives: this.lastPreferenceDirectives,
-        summaryAutoEnabled: this.dom.autoSummaryToggle?.checked ?? true
+        summaryAutoEnabled: this.dom.autoSummaryToggle?.checked ?? true,
+        apiKey
       })
     } catch (error) {
       console.error('Failed to connect:', error)
-      alert('Failed to connect to voice agent. Please check your ephemeral token and try again.')
+      alert('Failed to connect to voice agent. Please check your API key and try again.')
     }
   }
 
@@ -310,6 +317,9 @@ export class VoiceAgentController {
     const { connected, connecting, hasUsageData } = status
     this.stateStore.update({ isConnected: connected, isConnecting: connecting })
 
+    if (this.dom.apiKeyInput) {
+      this.dom.apiKeyInput.disabled = connected || connecting
+    }
     if (this.dom.purposeSelect) {
       this.dom.purposeSelect.disabled = connected || connecting
     }

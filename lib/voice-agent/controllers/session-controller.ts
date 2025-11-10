@@ -32,6 +32,7 @@ interface ConnectOptions {
   questionnaireCompleted: boolean
   preferenceDirectives: string[]
   summaryAutoEnabled: boolean
+  apiKey: string
 }
 
 interface ConnectionStatus {
@@ -85,7 +86,7 @@ export class SessionController {
     this.updateStatus(false, true)
 
     try {
-      const token = await this.generateEphemeralToken()
+      const token = await this.generateEphemeralToken(options.apiKey)
       this.pendingLocalUserMessages = []
       this.suppressedResponseIds.clear()
       this.suppressedItemIds.clear()
@@ -356,7 +357,7 @@ export class SessionController {
     }
   }
 
-  private async generateEphemeralToken(): Promise<string> {
+  private async generateEphemeralToken(apiKey: string): Promise<string> {
     if (!this.dom.statusElement) return ''
     this.dom.statusElement.textContent = 'トークン生成中...'
 
@@ -365,7 +366,8 @@ export class SessionController {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ apiKey })
       })
       if (!response.ok) {
         const errorData = await response.json()
