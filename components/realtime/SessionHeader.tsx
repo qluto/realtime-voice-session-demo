@@ -10,6 +10,7 @@ export function SessionHeader() {
   const statusIndicatorRef = useDomNode('statusIndicator')
   const configOpenBtnRef = useDomNode('configOpenBtn')
   const modalityToggleRef = useDomNode('modalityToggle')
+  const apiKeyInputRef = useDomNode('apiKeyInput')
   const registerVoiceModality = useModalityButton('voice')
   const registerTextModality = useModalityButton('text')
 
@@ -23,6 +24,19 @@ export function SessionHeader() {
         </div>
       </div>
       <div className="session-cluster">
+        <div className="api-key-container">
+          <label htmlFor="api-key-input" className="api-key-label">
+            OpenAI API Key:
+          </label>
+          <input
+            id="api-key-input"
+            ref={apiKeyInputRef}
+            type="password"
+            className="api-key-input"
+            placeholder="sk-proj-..."
+            aria-label="OpenAI API Key"
+          />
+        </div>
         <button
           id="config-open-btn"
           ref={configOpenBtnRef}

@@ -9,6 +9,7 @@ export interface VoiceAgentDomRefs {
   newSessionBtn: HTMLButtonElement
   statusElement: HTMLSpanElement
   statusIndicator: HTMLElement
+  apiKeyInput: HTMLInputElement | null
   purposeSelect: HTMLSelectElement | null
   purposeDescription: HTMLElement | null
   coachCalibratorForm: HTMLFormElement | null
@@ -133,6 +134,7 @@ export const collectDomRefs = (): VoiceAgentDomRefs => {
     newSessionBtn,
     statusElement,
     statusIndicator,
+    apiKeyInput: scalarRegistry.apiKeyInput ?? null,
     purposeSelect: scalarRegistry.purposeSelect ?? null,
     purposeDescription: scalarRegistry.purposeDescription ?? null,
     coachCalibratorForm: scalarRegistry.coachCalibratorForm ?? null,

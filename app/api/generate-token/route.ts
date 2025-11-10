@@ -4,14 +4,28 @@ const REALTIME_TOKEN_URL = 'https://api.openai.com/v1/realtime/client_secrets'
 
 const realtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime'
 
-export async function POST(_request: NextRequest) {
-  const apiKey = process.env.OPENAI_API_KEY
+export async function POST(request: NextRequest) {
+  let apiKey: string | undefined
 
-  if (!apiKey) {
+  try {
+    const body = await request.json()
+    apiKey = body.apiKey
+  } catch (error) {
     return NextResponse.json({
-      error: 'OPENAI_API_KEY not configured'
+      error: 'Invalid request body'
     }, {
-      status: 500,
+      status: 400,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
+    })
+  }
+
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    return NextResponse.json({
+      error: 'API key is required in request body'
+    }, {
+      status: 400,
       headers: {
         'Cache-Control': 'no-store'
       }
